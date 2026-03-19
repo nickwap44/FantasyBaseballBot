@@ -38,5 +38,7 @@ export const config = {
   espnSport: process.env.ESPN_SPORT || "baseball",
   espnSwid: process.env.ESPN_SWID || null,
   espnS2: process.env.ESPN_S2 || null,
-  openAiApiKey: process.env.OPENAI_API_KEY || null
+  openAiApiKey: process.env.OPENAI_API_KEY || null,
+  featureRealtimePodcast: process.env.FEATURE_REALTIME_PODCAST === "true",
+  podcastRenderer: process.env.PODCAST_RENDERER || "tts"
 };

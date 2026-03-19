@@ -1,6 +1,8 @@
 import { AttachmentBuilder } from "discord.js";
 import { stitchMp3Segments } from "./audioAssembler.js";
+import { config } from "./config.js";
 import { generateSpeech, generateText } from "./openaiClient.js";
+import { buildRealtimePodcastAudio } from "./realtimePodcastRenderer.js";
 import { formatDateTime } from "./time.js";
 
 function scoreTeamStrength(team) {
@@ -200,8 +202,20 @@ function parseTranscriptLines(transcript) {
     .filter((line) => line.text);
 }
 
-function getVoiceForSpeaker(speaker) {
+export function getVoiceForSpeaker(speaker, renderer = "tts") {
   const normalized = speaker.toLowerCase();
+  if (renderer === "realtime") {
+    if (normalized.includes("rico")) {
+      return "cedar";
+    }
+
+    if (normalized.includes("elena")) {
+      return "ash";
+    }
+
+    return "marin";
+  }
+
   if (normalized.includes("rico")) {
     return "cedar";
   }
@@ -213,7 +227,7 @@ function getVoiceForSpeaker(speaker) {
   return "marin";
 }
 
-function getVoiceInstructionsForSpeaker(speaker) {
+export function getVoiceInstructionsForSpeaker(speaker) {
   const normalized = speaker.toLowerCase();
 
   if (normalized.includes("rico")) {
@@ -245,7 +259,7 @@ function buildNarratedTranscript(transcript) {
     .filter((line) => line.text);
 }
 
-async function buildMultiVoicePodcastAudio(transcript) {
+async function buildTtsPodcastAudio(transcript) {
   const lines = buildNarratedTranscript(transcript);
   const segments = [];
 
@@ -253,7 +267,7 @@ async function buildMultiVoicePodcastAudio(transcript) {
     segments.push(
       await generateSpeech({
         text: line.text,
-        voice: getVoiceForSpeaker(line.speaker),
+        voice: getVoiceForSpeaker(line.speaker, "tts"),
         format: "mp3",
         instructions: getVoiceInstructionsForSpeaker(line.speaker)
       })
@@ -263,7 +277,16 @@ async function buildMultiVoicePodcastAudio(transcript) {
   return stitchMp3Segments(segments);
 }
 
-export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
+async function buildPodcastAudio(transcript, renderer) {
+  const lines = buildNarratedTranscript(transcript);
+  if (renderer === "realtime") {
+    return buildRealtimePodcastAudio(lines, (speaker) => getVoiceForSpeaker(speaker, "realtime"), getVoiceInstructionsForSpeaker);
+  }
+
+  return buildTtsPodcastAudio(transcript);
+}
+
+export async function buildPodcastPackage(snapshot, podcastHistory, timezone, renderer = config.podcastRenderer) {
   const transcript = await generateText({
     systemPrompt:
       "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter.",
@@ -271,7 +294,7 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
     temperature: 1
   });
 
-  const mp3Buffer = await buildMultiVoicePodcastAudio(transcript);
+  const mp3Buffer = await buildPodcastAudio(transcript, renderer);
   const transcriptBuffer = Buffer.from(transcript, "utf8");
   const summary = await generateText({
     systemPrompt:
@@ -291,7 +314,11 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
   };
 }
 
-export async function buildDemoPodcastPackage(snapshot, timezone) {
+export async function buildDemoPodcastPackage(
+  snapshot,
+  timezone,
+  renderer = config.podcastRenderer
+) {
   const transcript = [
     "Mason: Welcome back to the league podcast, where the standings are tight and the waiver claims are somehow even tighter.",
     "Rico: I am telling you right now, the Waiver Wire Wizards are drunk on power after that Jackson Holliday pickup.",
@@ -315,7 +342,7 @@ export async function buildDemoPodcastPackage(snapshot, timezone) {
   return {
     transcript,
     summary,
-    audioAttachment: new AttachmentBuilder(await buildMultiVoicePodcastAudio(transcript), {
+    audioAttachment: new AttachmentBuilder(await buildPodcastAudio(transcript, renderer), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
     }),
     transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {

@@ -72,3 +72,34 @@ export async function stitchMp3Segments(mp3Buffers) {
     await rm(tempDir, { recursive: true, force: true });
   }
 }
+
+export async function convertPcmToMp3(pcmBuffer, sampleRate = 24000) {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "fantasy-pcm-"));
+
+  try {
+    const inputPath = path.join(tempDir, "input.pcm");
+    const outputPath = path.join(tempDir, "output.mp3");
+
+    await writeFile(inputPath, pcmBuffer);
+    await runFfmpeg([
+      "-y",
+      "-f",
+      "s16le",
+      "-ar",
+      String(sampleRate),
+      "-ac",
+      "1",
+      "-i",
+      inputPath,
+      "-codec:a",
+      "libmp3lame",
+      "-b:a",
+      "128k",
+      outputPath
+    ]);
+
+    return readFile(outputPath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}

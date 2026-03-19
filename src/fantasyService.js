@@ -10,6 +10,7 @@ import {
   buildSocialPost,
   buildTransactionsSummary
 } from "./fantasyContent.js";
+import { config } from "./config.js";
 import { getMockLeagueSnapshot } from "./mockLeague.js";
 import { getDateInTimezone } from "./time.js";
 
@@ -106,11 +107,20 @@ async function sendFeatureMessage(client, guildConfig, feature, snapshot, state)
 
   if (feature === "podcast") {
     const previousSummary = state.podcastHistory?.slice(-3).join("\n\n") || "";
-    const podcast = await buildPodcastPackage(snapshot, previousSummary, guildConfig.timezone);
+    const renderer =
+      config.featureRealtimePodcast && config.podcastRenderer === "realtime"
+        ? "realtime"
+        : "tts";
+    const podcast = await buildPodcastPackage(
+      snapshot,
+      previousSummary,
+      guildConfig.timezone,
+      renderer
+    );
     await channel.send({
       content: [
         "Weekly fantasy podcast is live.",
-        "AI-generated voices and script based on league results and transaction activity.",
+        `AI-generated voices and script based on league results and transaction activity. Renderer: ${renderer}.`,
         "",
         podcast.summary
       ].join("\n"),
@@ -204,7 +214,10 @@ export async function handleFantasyTest(testType, guildId, client) {
     : await getLeagueSnapshot();
   const guildConfig = await getGuildConfig(guildId);
   const timezone = guildConfig?.timezone || "America/Los_Angeles";
-  const normalizedType = testType.replace("demo-", "");
+  const normalizedType = testType
+    .replace("demo-", "")
+    .replace("-realtime", "")
+    .replace("-tts", "");
 
   if (normalizedType === "transactions") {
     const content = testType.startsWith("demo-")
@@ -243,9 +256,16 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "podcast") {
+    const renderer = testType.endsWith("-realtime")
+      ? "realtime"
+      : testType.endsWith("-tts")
+        ? "tts"
+        : config.featureRealtimePodcast && config.podcastRenderer === "realtime"
+          ? "realtime"
+          : "tts";
     const podcast = testType.startsWith("demo-")
-      ? await buildDemoPodcastPackage(snapshot, timezone)
-      : await buildPodcastPackage(snapshot, "", timezone);
+      ? await buildDemoPodcastPackage(snapshot, timezone, renderer)
+      : await buildPodcastPackage(snapshot, "", timezone, renderer);
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
       throw new Error("Podcast channel is not configured.");
@@ -259,7 +279,7 @@ export async function handleFantasyTest(testType, guildId, client) {
     await channel.send({
       content: [
         testType.startsWith("demo-") ? "Demo podcast test episode." : "Manual podcast test episode.",
-        "AI-generated voices and script.",
+        `AI-generated voices and script. Renderer: ${renderer}.`,
         "",
         podcast.summary
       ].join("\n"),
