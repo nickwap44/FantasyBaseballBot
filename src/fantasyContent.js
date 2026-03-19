@@ -1,5 +1,5 @@
 import { AttachmentBuilder } from "discord.js";
-import { stitchMp3Segments } from "./audioAssembler.js";
+import { generateMusicCue, stitchMp3Segments } from "./audioAssembler.js";
 import { config } from "./config.js";
 import { generateSpeech, generateText } from "./openaiClient.js";
 import { buildRealtimePodcastAudio } from "./realtimePodcastRenderer.js";
@@ -58,6 +58,9 @@ function matchupBlock(matchups) {
     )
     .join("\n");
 }
+
+const PODCAST_TITLE = "The Backyard Bullpen";
+const PODCAST_SUBTITLE = "The official podcast of the Backyard Baseball Association";
 
 export async function buildTransactionsSummary(snapshot, timezone) {
   return generateText({
@@ -290,6 +293,35 @@ async function buildPodcastAudio(transcript, renderer) {
   return buildTtsPodcastAudio(transcript);
 }
 
+async function buildPodcastPackageAudio(transcript, renderer) {
+  const introMusic = await generateMusicCue("intro");
+  const introTitle = await generateSpeech({
+    text: `${PODCAST_TITLE}. ${PODCAST_SUBTITLE}.`,
+    voice: getVoiceForSpeaker("Mason", renderer),
+    format: "mp3",
+    instructions:
+      "Deliver this like a polished podcast show title. Warm, upbeat, and confident."
+  });
+  const bumper = await generateSpeech({
+    text: "Now, here's Mason, Rico, and Elena.",
+    voice: getVoiceForSpeaker("Mason", renderer),
+    format: "mp3",
+    instructions:
+      "Read this like a short show bumper leading into the hosts. Crisp and energetic."
+  });
+  const body = await buildPodcastAudio(transcript, renderer);
+  const outroBumper = await generateSpeech({
+    text: `You've been listening to ${PODCAST_TITLE}. Thanks for tuning in to the Backyard Baseball Association.`,
+    voice: getVoiceForSpeaker("Mason", renderer),
+    format: "mp3",
+    instructions:
+      "Read this like a clean podcast sign-off. Friendly, smooth, and conclusive."
+  });
+  const outroMusic = await generateMusicCue("outro");
+
+  return stitchMp3Segments([introMusic, introTitle, bumper, body, outroBumper, outroMusic]);
+}
+
 async function buildPodcastMemory(transcript) {
   return generateText({
     systemPrompt:
@@ -306,7 +338,7 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone, re
     temperature: 1
   });
 
-  const mp3Buffer = await buildPodcastAudio(transcript, renderer);
+  const mp3Buffer = await buildPodcastPackageAudio(transcript, renderer);
   const transcriptBuffer = Buffer.from(transcript, "utf8");
   const summary = await generateText({
     systemPrompt:
@@ -317,7 +349,7 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone, re
 
   return {
     transcript,
-    summary,
+    summary: `**${PODCAST_TITLE}**\n${PODCAST_SUBTITLE}\n\n${summary}`,
     memory,
     audioAttachment: new AttachmentBuilder(mp3Buffer, {
       name: `fantasy-podcast-week-${snapshot.currentScoringPeriod}.mp3`
@@ -364,9 +396,9 @@ export async function buildDemoPodcastPackage(
 
   return {
     transcript,
-    summary,
+    summary: `**${PODCAST_TITLE}**\n${PODCAST_SUBTITLE}\n\n${summary}`,
     memory,
-    audioAttachment: new AttachmentBuilder(await buildPodcastAudio(transcript, renderer), {
+    audioAttachment: new AttachmentBuilder(await buildPodcastPackageAudio(transcript, renderer), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
     }),
     transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {

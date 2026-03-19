@@ -103,3 +103,40 @@ export async function convertPcmToMp3(pcmBuffer, sampleRate = 24000) {
     await rm(tempDir, { recursive: true, force: true });
   }
 }
+
+export async function generateMusicCue(kind = "intro") {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "fantasy-music-"));
+
+  try {
+    const outputPath = path.join(tempDir, `${kind}.mp3`);
+    const filterMap = {
+      intro:
+        "sine=frequency=523.25:duration=0.18[a0];" +
+        "sine=frequency=659.25:duration=0.18[a1];" +
+        "sine=frequency=783.99:duration=0.45[a2];" +
+        "[a0][a1][a2]concat=n=3:v=0:a=1,volume=0.22,afade=t=out:st=0.65:d=0.12",
+      outro:
+        "sine=frequency=783.99:duration=0.18[a0];" +
+        "sine=frequency=659.25:duration=0.18[a1];" +
+        "sine=frequency=523.25:duration=0.55[a2];" +
+        "[a0][a1][a2]concat=n=3:v=0:a=1,volume=0.18,afade=t=out:st=0.7:d=0.18"
+    };
+
+    await runFfmpeg([
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      filterMap[kind] || filterMap.intro,
+      "-codec:a",
+      "libmp3lame",
+      "-b:a",
+      "128k",
+      outputPath
+    ]);
+
+    return readFile(outputPath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
