@@ -1,4 +1,5 @@
 import { AttachmentBuilder } from "discord.js";
+import { stitchMp3Segments } from "./audioAssembler.js";
 import { generateSpeech, generateText } from "./openaiClient.js";
 import { formatDateTime } from "./time.js";
 
@@ -209,8 +210,24 @@ function getVoiceForSpeaker(speaker) {
 function buildNarratedTranscript(transcript) {
   return parseTranscriptLines(transcript)
     .slice(0, 80)
-    .map((line) => `${line.speaker}: ${line.text}`)
-    .join("\n");
+    .filter((line) => line.text);
+}
+
+async function buildMultiVoicePodcastAudio(transcript) {
+  const lines = buildNarratedTranscript(transcript);
+  const segments = [];
+
+  for (const line of lines) {
+    segments.push(
+      await generateSpeech({
+        text: line.text,
+        voice: getVoiceForSpeaker(line.speaker),
+        format: "mp3"
+      })
+    );
+  }
+
+  return stitchMp3Segments(segments);
 }
 
 export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
@@ -221,11 +238,7 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
     temperature: 1
   });
 
-  const mp3Buffer = await generateSpeech({
-    text: buildNarratedTranscript(transcript),
-    voice: "alloy",
-    format: "mp3"
-  });
+  const mp3Buffer = await buildMultiVoicePodcastAudio(transcript);
   const transcriptBuffer = Buffer.from(transcript, "utf8");
   const summary = await generateText({
     systemPrompt:
@@ -269,11 +282,7 @@ export async function buildDemoPodcastPackage(snapshot, timezone) {
   return {
     transcript,
     summary,
-    audioAttachment: new AttachmentBuilder(await generateSpeech({
-      text: buildNarratedTranscript(transcript),
-      voice: "alloy",
-      format: "mp3"
-    }), {
+    audioAttachment: new AttachmentBuilder(await buildMultiVoicePodcastAudio(transcript), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
     }),
     transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {
