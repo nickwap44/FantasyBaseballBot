@@ -107,7 +107,7 @@ function renderLineWithRealtime({ text, voice, instructions }) {
       sendEvent(ws, {
         type: "session.update",
         session: {
-          modalities: ["audio"],
+          modalities: ["audio", "text"],
           output_audio_format: "pcm16",
           voice,
           instructions: buildSessionInstructions(instructions)
@@ -118,7 +118,7 @@ function renderLineWithRealtime({ text, voice, instructions }) {
         type: "response.create",
         response: {
           conversation: "none",
-          modalities: ["audio"],
+          modalities: ["audio", "text"],
           output_audio_format: "pcm16",
           voice,
           input: [
