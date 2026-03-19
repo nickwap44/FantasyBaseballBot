@@ -50,18 +50,29 @@ export async function generateText({
   return payload.output_text?.trim() || "";
 }
 
-export async function generateSpeech({ text, voice = "alloy", format = "wav" }) {
+export async function generateSpeech({
+  text,
+  voice = "alloy",
+  format = "wav",
+  instructions = null
+}) {
+  const body = {
+    model: "gpt-4o-mini-tts",
+    voice,
+    response_format: format,
+    input: text
+  };
+
+  if (instructions) {
+    body.instructions = instructions;
+  }
+
   const response = await fetch(OPENAI_SPEECH_URL, {
     method: "POST",
     headers: getHeaders({
       "Content-Type": "application/json"
     }),
-    body: JSON.stringify({
-      model: "gpt-4o-mini-tts",
-      voice,
-      response_format: format,
-      input: text
-    })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {

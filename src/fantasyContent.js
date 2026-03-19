@@ -159,6 +159,12 @@ function buildPodcastPrompt(snapshot, historyText, timezone) {
     "Include a cold open, one standings segment, one matchup/results segment, one transactions/news segment, and one closing prediction segment.",
     "The hosts should sound like they know each other and reference prior talking points naturally.",
     "Make every line start with the speaker name followed by a colon.",
+    "Write for spoken audio, not for reading.",
+    "Use short, natural sentences and contractions.",
+    "Let hosts interrupt, react, and play off each other instead of delivering long monologues.",
+    "Avoid stat-dump paragraphs. Fold numbers into conversation naturally.",
+    "Use occasional quick asides, laughter beats, and rhetorical questions where they fit.",
+    "Do not include stage directions, sound effects, or narration outside the host dialogue.",
     `Current generation time: ${formatDateTime(new Date(), timezone)}`,
     "",
     "Recent podcast memory:",
@@ -197,14 +203,40 @@ function parseTranscriptLines(transcript) {
 function getVoiceForSpeaker(speaker) {
   const normalized = speaker.toLowerCase();
   if (normalized.includes("rico")) {
-    return "ash";
+    return "cedar";
   }
 
   if (normalized.includes("elena")) {
-    return "sage";
+    return "ash";
   }
 
-  return "alloy";
+  return "marin";
+}
+
+function getVoiceInstructionsForSpeaker(speaker) {
+  const normalized = speaker.toLowerCase();
+
+  if (normalized.includes("rico")) {
+    return [
+      "Sound energetic, impulsive, and a little unhinged in a fun sports-radio way.",
+      "Punch key words, vary pacing, and lean into hot-take confidence.",
+      "Keep it natural and conversational, not announcer-stiff."
+    ].join(" ");
+  }
+
+  if (normalized.includes("elena")) {
+    return [
+      "Sound calm, grounded, and analytically sharp.",
+      "Use a warm, measured delivery with steady pacing and subtle emphasis.",
+      "Keep it natural, thoughtful, and easy to follow."
+    ].join(" ");
+  }
+
+  return [
+    "Sound like a polished but relaxed podcast host.",
+    "Be confident, conversational, and smooth, with crisp pacing and natural emphasis.",
+    "Keep the delivery friendly and human, not robotic or overly theatrical."
+  ].join(" ");
 }
 
 function buildNarratedTranscript(transcript) {
@@ -222,7 +254,8 @@ async function buildMultiVoicePodcastAudio(transcript) {
       await generateSpeech({
         text: line.text,
         voice: getVoiceForSpeaker(line.speaker),
-        format: "mp3"
+        format: "mp3",
+        instructions: getVoiceInstructionsForSpeaker(line.speaker)
       })
     );
   }
@@ -233,7 +266,7 @@ async function buildMultiVoicePodcastAudio(transcript) {
 export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter.",
+      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter.",
     userPrompt: buildPodcastPrompt(snapshot, podcastHistory, timezone),
     temperature: 1
   });
