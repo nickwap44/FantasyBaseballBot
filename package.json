@@ -1,0 +1,19 @@
+{
+  "name": "fantasy-baseball-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that reminds fantasy baseball players to set their lineups one hour before the first MLB game.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy-commands": "node src/deploy-commands.js",
+    "check": "node --check src/index.js && node --check src/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7"
+  }
+}
