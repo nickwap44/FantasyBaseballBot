@@ -61,6 +61,14 @@ function matchupBlock(matchups) {
 
 const PODCAST_TITLE = "The Backyard Bullpen";
 const PODCAST_SUBTITLE = "The official podcast of the Backyard Baseball Association";
+const PODCAST_SEGMENTS = [
+  "Lead-off Check-In",
+  "Panic Meter",
+  "The April Coronation Watch",
+  "Waiver Wire Crimes",
+  "Disrespectful Trade Offer of the Week",
+  "Bullpen Close"
+];
 
 export async function buildTransactionsSummary(snapshot, timezone) {
   return generateText({
@@ -166,6 +174,8 @@ function buildPodcastPrompt(snapshot, historyText, timezone) {
     "They should tease each other, laugh, interrupt lightly, and keep a few running jokes alive across episodes.",
     "Use the memory block as canon for inside jokes, unresolved debates, and recurring bits.",
     "Include at least two playful callbacks or inside-joke moments when the memory block gives you something to use.",
+    `Use these recurring show segments when they fit: ${PODCAST_SEGMENTS.join(", ")}.`,
+    "Mason should actively introduce segment names like a real recurring show.",
     "Make every line start with the speaker name followed by a colon.",
     "Write for spoken audio, not for reading.",
     "Use short, natural sentences and contractions.",
@@ -327,6 +337,50 @@ async function buildPodcastMemory(transcript) {
     systemPrompt:
       "Extract durable podcast memory for future episodes. Return three short sections titled Running jokes, Host chemistry, and League storylines. Keep it concise and specific.",
     userPrompt: transcript
+  });
+}
+
+export async function buildTransactionGrades(snapshot, timezone, registryText = "") {
+  return generateText({
+    systemPrompt:
+      "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant.",
+    userPrompt: [
+      `Generate instant transaction grades for ${formatDateTime(new Date(), timezone)}.`,
+      registryText ? `Media registry:\n${registryText}` : "",
+      "Transactions:",
+      recentTransactionsBlock(snapshot.transactions.slice(0, 5))
+    ].filter(Boolean).join("\n\n")
+  });
+}
+
+export function buildDemoTransactionGrades(snapshot, timezone) {
+  return [
+    `**Instant Waiver and Trade Grades Demo**`,
+    `Filed for ${formatDateTime(new Date(), timezone)}`,
+    "",
+    "Waiver Wire Wizards: **A-**",
+    "Jackson Holliday for $17 is exactly the kind of upside swing Rico will call destiny and Elena will call barely defensible.",
+    "",
+    "Scranton Sliders trade: **B+**",
+    "Big-name swap, real ceiling, but Mason would like everybody to stop acting like one trade in April rewrites the standings.",
+    "",
+    "Dong Bongers free-agent add: **B**",
+    "Solid cleanup move. Not glamorous, but this is how you avoid ending up on the panic meter."
+  ].join("\n");
+}
+
+export async function buildRegistryUpdate(snapshot, existingRegistryText = "") {
+  return generateText({
+    systemPrompt:
+      "You maintain the shared media universe for a fantasy baseball league. Update and compress durable continuity into three sections titled Running jokes, Host biases, and League storylines. Keep only the strongest recurring material and avoid repetition.",
+    userPrompt: [
+      existingRegistryText ? `Existing registry:\n${existingRegistryText}` : "No existing registry yet.",
+      "",
+      "New league inputs:",
+      `Standings:\n${standingsBlock(snapshot.teams)}`,
+      "",
+      `Transactions:\n${recentTransactionsBlock(snapshot.transactions.slice(0, 8))}`
+    ].join("\n")
   });
 }
 

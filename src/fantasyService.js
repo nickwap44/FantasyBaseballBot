@@ -1,13 +1,23 @@
-import { getGuildConfig, getGuildConfigs, getFantasyState, saveFantasyState } from "./storage.js";
+import {
+  getGuildConfig,
+  getGuildConfigs,
+  getFantasyState,
+  getMediaRegistry,
+  saveFantasyState,
+  saveMediaRegistry
+} from "./storage.js";
 import { getLeagueSnapshot, testEspnConnection } from "./espnApi.js";
 import {
   buildDemoPodcastPackage,
   buildDemoPowerRankings,
   buildDemoSocialPost,
+  buildDemoTransactionGrades,
   buildDemoTransactionsSummary,
   buildPodcastPackage,
   buildPowerRankings,
+  buildRegistryUpdate,
   buildSocialPost,
+  buildTransactionGrades,
   buildTransactionsSummary
 } from "./fantasyContent.js";
 import { config } from "./config.js";
@@ -76,7 +86,65 @@ function getStateKey(feature, timezone, now) {
   return `${feature}:${timezone}:${getDateInTimezone(now, timezone)}`;
 }
 
-async function sendFeatureMessage(client, guildConfig, feature, snapshot, state) {
+function formatRegistryForPrompt(registry) {
+  if (!registry) {
+    return "";
+  }
+
+  return [
+    registry.runningJokes ? `Running jokes:\n${registry.runningJokes}` : "",
+    registry.hostBiases ? `Host biases:\n${registry.hostBiases}` : "",
+    registry.leagueStorylines ? `League storylines:\n${registry.leagueStorylines}` : ""
+  ].filter(Boolean).join("\n\n");
+}
+
+function parseRegistrySections(text) {
+  const sections = {
+    runningJokes: "",
+    hostBiases: "",
+    leagueStorylines: ""
+  };
+
+  const runningMatch = text.match(/Running jokes:\s*([\s\S]*?)(?:Host biases:|League storylines:|$)/i);
+  const biasMatch = text.match(/Host biases:\s*([\s\S]*?)(?:League storylines:|$)/i);
+  const storyMatch = text.match(/League storylines:\s*([\s\S]*)$/i);
+
+  sections.runningJokes = runningMatch?.[1]?.trim() || "";
+  sections.hostBiases = biasMatch?.[1]?.trim() || "";
+  sections.leagueStorylines = storyMatch?.[1]?.trim() || "";
+  return sections;
+}
+
+async function maybeSendInstantTransactionGrades(client, guildId, guildConfig, snapshot, state, registry) {
+  const transactionsChannelId = guildConfig.transactionsChannelId;
+  if (!transactionsChannelId || snapshot.transactions.length === 0) {
+    return state;
+  }
+
+  const latestTransactionId = String(snapshot.transactions[0].id);
+  if (state.lastGradedTransactionId === latestTransactionId) {
+    return state;
+  }
+
+  const channel = await client.channels.fetch(transactionsChannelId);
+  if (!channel?.isTextBased()) {
+    return state;
+  }
+
+  const grades = await buildTransactionGrades(
+    snapshot,
+    guildConfig.timezone,
+    formatRegistryForPrompt(registry)
+  );
+  await channel.send(grades);
+
+  return {
+    ...state,
+    lastGradedTransactionId: latestTransactionId
+  };
+}
+
+async function sendFeatureMessage(client, guildId, guildConfig, feature, snapshot, state, registry) {
   const channelId = getFeatureChannelId(guildConfig, feature);
   if (!channelId) {
     return state;
@@ -106,7 +174,10 @@ async function sendFeatureMessage(client, guildConfig, feature, snapshot, state)
   }
 
   if (feature === "podcast") {
-    const previousMemory = state.podcastMemoryHistory?.slice(-4).join("\n\n") || "";
+    const previousMemory = [
+      state.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
+      formatRegistryForPrompt(registry)
+    ].filter(Boolean).join("\n\n");
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
         ? "realtime"
@@ -142,11 +213,37 @@ export async function runFantasyJobs(client, logger = console) {
   const now = new Date();
   const snapshot = await getLeagueSnapshot();
   const fantasyState = await getFantasyState();
+  const mediaRegistry = await getMediaRegistry();
   const nextState = { ...fantasyState };
+  const nextRegistry = { ...mediaRegistry };
 
   for (const [guildId, guildConfig] of Object.entries(guildConfigs)) {
     const timezone = guildConfig.timezone || "America/Los_Angeles";
     nextState[guildId] = nextState[guildId] || {};
+    nextRegistry[guildId] = nextRegistry[guildId] || {
+      runningJokes: "",
+      hostBiases: "",
+      leagueStorylines: ""
+    };
+
+    try {
+      nextState[guildId] = await maybeSendInstantTransactionGrades(
+        client,
+        guildId,
+        guildConfig,
+        snapshot,
+        nextState[guildId],
+        nextRegistry[guildId]
+      );
+
+      const updatedRegistryText = await buildRegistryUpdate(
+        snapshot,
+        formatRegistryForPrompt(nextRegistry[guildId])
+      );
+      nextRegistry[guildId] = parseRegistrySections(updatedRegistryText);
+    } catch (error) {
+      logger.error(`Fantasy registry/transaction grade update failed for guild ${guildId}:`, error);
+    }
 
     for (const feature of ["transactions", "power", "social", "podcast"]) {
       const runKey = getStateKey(feature, timezone, now);
@@ -161,10 +258,12 @@ export async function runFantasyJobs(client, logger = console) {
       try {
         const updatedState = await sendFeatureMessage(
           client,
+          guildId,
           guildConfig,
           feature,
           snapshot,
-          nextState[guildId]
+          nextState[guildId],
+          nextRegistry[guildId]
         );
         nextState[guildId] = {
           ...updatedState,
@@ -177,6 +276,7 @@ export async function runFantasyJobs(client, logger = console) {
   }
 
   await saveFantasyState(nextState);
+  await saveMediaRegistry(nextRegistry);
 }
 
 export function startFantasyLoop(client, intervalMs) {
@@ -227,6 +327,18 @@ export async function handleFantasyTest(testType, guildId, client) {
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
       return "Demo transaction recap posted.";
+    }
+
+    return content;
+  }
+
+  if (normalizedType === "transaction-grades") {
+    const content = testType.startsWith("demo-")
+      ? buildDemoTransactionGrades(snapshot, timezone)
+      : await buildTransactionGrades(snapshot, timezone);
+    if (testType.startsWith("demo-")) {
+      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
+      return "Demo transaction grades posted.";
     }
 
     return content;

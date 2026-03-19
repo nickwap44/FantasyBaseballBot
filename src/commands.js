@@ -117,10 +117,12 @@ export const commandDefinitions = [
         .addChoices(
           { name: "espn", value: "espn" },
           { name: "transactions", value: "transactions" },
+          { name: "transaction-grades", value: "transaction-grades" },
           { name: "power", value: "power" },
           { name: "social", value: "social" },
           { name: "podcast", value: "podcast" },
           { name: "demo-transactions", value: "demo-transactions" },
+          { name: "demo-transaction-grades", value: "demo-transaction-grades" },
           { name: "demo-power", value: "demo-power" },
           { name: "demo-social", value: "demo-social" },
           { name: "demo-podcast", value: "demo-podcast" },
