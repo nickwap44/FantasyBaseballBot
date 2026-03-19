@@ -119,7 +119,11 @@ export const commandDefinitions = [
           { name: "transactions", value: "transactions" },
           { name: "power", value: "power" },
           { name: "social", value: "social" },
-          { name: "podcast", value: "podcast" }
+          { name: "podcast", value: "podcast" },
+          { name: "demo-transactions", value: "demo-transactions" },
+          { name: "demo-power", value: "demo-power" },
+          { name: "demo-social", value: "demo-social" },
+          { name: "demo-podcast", value: "demo-podcast" }
         )
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)

@@ -6,6 +6,7 @@ import {
   buildSocialPost,
   buildTransactionsSummary
 } from "./fantasyContent.js";
+import { getMockLeagueSnapshot } from "./mockLeague.js";
 import { getDateInTimezone } from "./time.js";
 
 function getFeatureChannelId(guildConfig, feature) {
@@ -17,6 +18,20 @@ function getFeatureChannelId(guildConfig, feature) {
   };
 
   return map[feature] || null;
+}
+
+async function sendTestContentToFeatureChannel(client, guildConfig, feature, content) {
+  const channelId = getFeatureChannelId(guildConfig, feature);
+  if (!channelId) {
+    throw new Error(`${feature} channel is not configured.`);
+  }
+
+  const channel = await client.channels.fetch(channelId);
+  if (!channel?.isTextBased()) {
+    throw new Error(`${feature} channel is not available.`);
+  }
+
+  await channel.send(content);
 }
 
 function isTimeToRun(now, timezone, feature) {
@@ -180,23 +195,44 @@ export async function handleFantasyTest(testType, guildId, client) {
     ].join("\n");
   }
 
-  const snapshot = await getLeagueSnapshot();
+  const snapshot = testType.startsWith("demo-")
+    ? getMockLeagueSnapshot()
+    : await getLeagueSnapshot();
   const guildConfig = await getGuildConfig(guildId);
   const timezone = guildConfig?.timezone || "America/Los_Angeles";
+  const normalizedType = testType.replace("demo-", "");
 
-  if (testType === "transactions") {
-    return buildTransactionsSummary(snapshot, timezone);
+  if (normalizedType === "transactions") {
+    const content = await buildTransactionsSummary(snapshot, timezone);
+    if (testType.startsWith("demo-")) {
+      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
+      return "Demo transaction recap posted.";
+    }
+
+    return content;
   }
 
-  if (testType === "power") {
-    return buildPowerRankings(snapshot, timezone);
+  if (normalizedType === "power") {
+    const content = await buildPowerRankings(snapshot, timezone);
+    if (testType.startsWith("demo-")) {
+      await sendTestContentToFeatureChannel(client, guildConfig, "power", content);
+      return "Demo power rankings posted.";
+    }
+
+    return content;
   }
 
-  if (testType === "social") {
-    return buildSocialPost(snapshot, timezone);
+  if (normalizedType === "social") {
+    const content = await buildSocialPost(snapshot, timezone);
+    if (testType.startsWith("demo-")) {
+      await sendTestContentToFeatureChannel(client, guildConfig, "social", content);
+      return "Demo social post sent.";
+    }
+
+    return content;
   }
 
-  if (testType === "podcast") {
+  if (normalizedType === "podcast") {
     const podcast = await buildPodcastPackage(snapshot, "", timezone);
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
@@ -210,7 +246,7 @@ export async function handleFantasyTest(testType, guildId, client) {
 
     await channel.send({
       content: [
-        "Manual podcast test episode.",
+        testType.startsWith("demo-") ? "Demo podcast test episode." : "Manual podcast test episode.",
         "AI-generated voices and script.",
         "",
         podcast.summary

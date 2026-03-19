@@ -1,4 +1,4 @@
-import { getUpcomingFirstPitch } from "./mlbSchedule.js";
+import { getEspnDailyLockGame } from "./mlbSchedule.js";
 import { getGuildConfigs, markReminderSent, wasReminderSent } from "./storage.js";
 import { formatDateTime } from "./time.js";
 
@@ -12,7 +12,9 @@ function buildReminderMessage(guildConfig, game) {
 
   return [
     `${mention}${prefix}`,
-    `First pitch is in one hour: **${game.awayTeam} at ${game.homeTeam}**`,
+    "ESPN daily lock window starts in one hour.",
+    "Add/drops lock at the first scheduled MLB game of the day, and lineup slots begin locking then or at each player's scheduled game time depending on your ESPN lineup setting.",
+    `First scheduled game: **${game.awayTeam} at ${game.homeTeam}**`,
     `Game time: **${formatDateTime(game.startTime, guildConfig.timezone)}**`
   ].join("\n");
 }
@@ -27,7 +29,7 @@ export async function checkForReminders(client, logger = console) {
     }
 
     try {
-      const game = await getUpcomingFirstPitch(now, guildConfig.timezone);
+      const game = await getEspnDailyLockGame(now, guildConfig.timezone);
       if (!game) {
         continue;
       }

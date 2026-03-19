@@ -16,23 +16,49 @@ async function fetchScheduleRange(startDate, endDate) {
   return response.json();
 }
 
+function getGamesFromPayload(payload) {
+  return (payload.dates || [])
+    .map((day) => ({
+      date: day.date,
+      games: (day.games || [])
+        .map((game) => ({
+          id: game.gamePk,
+          startTime: new Date(game.gameDate),
+          awayTeam: game.teams?.away?.team?.name || "Away team",
+          homeTeam: game.teams?.home?.team?.name || "Home team"
+        }))
+        .filter((game) => !Number.isNaN(game.startTime.getTime()))
+        .sort((left, right) => left.startTime.getTime() - right.startTime.getTime())
+    }))
+    .filter((day) => day.games.length > 0);
+}
+
 export async function getUpcomingFirstPitch(now, timezone) {
   const startDate = getDateInTimezone(now, timezone);
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const endDate = getDateInTimezone(tomorrow, timezone);
   const payload = await fetchScheduleRange(startDate, endDate);
 
-  const games = (payload.dates || [])
-    .flatMap((day) => day.games || [])
-    .map((game) => ({
-      id: game.gamePk,
-      startTime: new Date(game.gameDate),
-      awayTeam: game.teams?.away?.team?.name || "Away team",
-      homeTeam: game.teams?.home?.team?.name || "Home team"
-    }))
+  const games = getGamesFromPayload(payload)
+    .flatMap((day) => day.games)
     .filter((game) => !Number.isNaN(game.startTime.getTime()))
     .filter((game) => game.startTime.getTime() > now.getTime())
     .sort((left, right) => left.startTime.getTime() - right.startTime.getTime());
 
   return games[0] || null;
+}
+
+export async function getEspnDailyLockGame(now, timezone) {
+  const startDate = getDateInTimezone(now, timezone);
+  const dayAfterTomorrow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const endDate = getDateInTimezone(dayAfterTomorrow, timezone);
+  const payload = await fetchScheduleRange(startDate, endDate);
+  const days = getGamesFromPayload(payload);
+
+  const today = days[0];
+  if (today?.games?.[0] && now.getTime() < today.games[0].startTime.getTime()) {
+    return today.games[0];
+  }
+
+  return days[1]?.games?.[0] || null;
 }
