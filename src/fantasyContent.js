@@ -1,5 +1,4 @@
 import { AttachmentBuilder } from "discord.js";
-import { combineWavBuffersToMp3 } from "./audio.js";
 import { generateSpeech, generateText } from "./openaiClient.js";
 import { formatDateTime } from "./time.js";
 
@@ -207,6 +206,13 @@ function getVoiceForSpeaker(speaker) {
   return "alloy";
 }
 
+function buildNarratedTranscript(transcript) {
+  return parseTranscriptLines(transcript)
+    .slice(0, 80)
+    .map((line) => `${line.speaker}: ${line.text}`)
+    .join("\n");
+}
+
 export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
   const transcript = await generateText({
     systemPrompt:
@@ -215,20 +221,11 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
     temperature: 1
   });
 
-  const lines = parseTranscriptLines(transcript).slice(0, 80);
-  const wavBuffers = [];
-
-  for (const line of lines) {
-    wavBuffers.push(
-      await generateSpeech({
-        text: line.text,
-        voice: getVoiceForSpeaker(line.speaker),
-        format: "wav"
-      })
-    );
-  }
-
-  const mp3Buffer = combineWavBuffersToMp3(wavBuffers);
+  const mp3Buffer = await generateSpeech({
+    text: buildNarratedTranscript(transcript),
+    voice: "alloy",
+    format: "mp3"
+  });
   const transcriptBuffer = Buffer.from(transcript, "utf8");
   const summary = await generateText({
     systemPrompt:
@@ -269,23 +266,14 @@ export async function buildDemoPodcastPackage(snapshot, timezone) {
     `- The hosts closed on ${snapshot.matchups[0].homeTeam} looking like the team to beat right now.`
   ].join("\n");
 
-  const lines = parseTranscriptLines(transcript);
-  const wavBuffers = [];
-
-  for (const line of lines) {
-    wavBuffers.push(
-      await generateSpeech({
-        text: line.text,
-        voice: getVoiceForSpeaker(line.speaker),
-        format: "wav"
-      })
-    );
-  }
-
   return {
     transcript,
     summary,
-    audioAttachment: new AttachmentBuilder(combineWavBuffersToMp3(wavBuffers), {
+    audioAttachment: new AttachmentBuilder(await generateSpeech({
+      text: buildNarratedTranscript(transcript),
+      voice: "alloy",
+      format: "mp3"
+    }), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
     }),
     transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {
