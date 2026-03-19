@@ -62,8 +62,10 @@ export async function stitchMp3Segments(mp3Buffers) {
       "0",
       "-i",
       concatFilePath,
-      "-c",
-      "copy",
+      "-codec:a",
+      "libmp3lame",
+      "-b:a",
+      "128k",
       outputPath
     ]);
 
@@ -111,15 +113,22 @@ export async function generateMusicCue(kind = "intro") {
     const outputPath = path.join(tempDir, `${kind}.mp3`);
     const filterMap = {
       intro:
-        "sine=frequency=523.25:duration=0.18[a0];" +
-        "sine=frequency=659.25:duration=0.18[a1];" +
-        "sine=frequency=783.99:duration=0.45[a2];" +
-        "[a0][a1][a2]concat=n=3:v=0:a=1,volume=0.22,afade=t=out:st=0.65:d=0.12",
+        "sine=frequency=196:duration=0.12[a0];" +
+        "sine=frequency=246.94:duration=0.12[a1];" +
+        "sine=frequency=293.66:duration=0.12[a2];" +
+        "sine=frequency=392:duration=0.4[a3];" +
+        "[a0][a1][a2][a3]concat=n=4:v=0:a=1," +
+        "volume=0.26," +
+        "aecho=0.8:0.6:40:0.2," +
+        "afade=t=out:st=0.58:d=0.16",
       outro:
-        "sine=frequency=783.99:duration=0.18[a0];" +
-        "sine=frequency=659.25:duration=0.18[a1];" +
-        "sine=frequency=523.25:duration=0.55[a2];" +
-        "[a0][a1][a2]concat=n=3:v=0:a=1,volume=0.18,afade=t=out:st=0.7:d=0.18"
+        "sine=frequency=392:duration=0.14[a0];" +
+        "sine=frequency=293.66:duration=0.14[a1];" +
+        "sine=frequency=246.94:duration=0.5[a2];" +
+        "[a0][a1][a2]concat=n=3:v=0:a=1," +
+        "volume=0.18," +
+        "aecho=0.8:0.6:45:0.15," +
+        "afade=t=out:st=0.56:d=0.22"
     };
 
     await runFfmpeg([

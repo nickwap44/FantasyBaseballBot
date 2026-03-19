@@ -366,32 +366,34 @@ export async function buildDemoPodcastPackage(
   renderer = config.podcastRenderer
 ) {
   const transcript = [
-    "Mason: Welcome back to the league podcast. The standings are tight, Rico is already trying to hand out a trophy in April, and somehow Elena is still pretending she's not enjoying this.",
-    "Rico: Pretending? Elena loves it. She just smiles like a Bond villain instead of yelling like I do.",
-    "Elena: That is not true. I smile like a person watching you declare a dynasty every time someone wins two waiver claims in a row.",
-    "Mason: There it is. Thirty seconds in and we're already back to Rico's annual April coronation.",
-    "Rico: Because I have vision, Mason. Waiver Wire Wizards dropped seventeen bucks on Jackson Holliday and I can feel history happening.",
-    "Elena: You felt history last week when you said the panic meter was broken, and then you immediately panicked for twelve straight minutes.",
-    "Mason: We do need to put the panic meter on a T-shirt at this point. That's become a real problem for the league.",
-    `Mason: Anyway, ${snapshot.teams[0].name} is sitting on top right now, but ${snapshot.teams[1].name} is close enough to make this interesting fast.`,
-    "Rico: Close enough? They're lurking. That's a roster that walks into the room and steals your lunch money.",
-    "Elena: The offense is real, but the bigger thing is roster balance. They don't need hero-ball from one superstar every night.",
-    `Mason: And meanwhile ${snapshot.matchups[0].homeTeam} is putting a pretty loud number on ${snapshot.matchups[0].awayTeam} this week, which is going to restart every group chat argument we already had on Sunday.`,
-    "Rico: Good. That's what the league is for. Mild overreaction, selective memory, and one truly disrespectful trade offer before breakfast.",
-    "Elena: Which, for the record, is still the funniest running bit in this league because none of you think you're the one sending the disrespectful offer.",
-    "Mason: That's the show. Rico is crowning teams, Elena is rolling her eyes in 4K, and the panic meter remains deeply compromised. We'll see you next episode."
+    "Mason: Welcome to The Backyard Bullpen. We are back, the Backyard Baseball Association is already noisy, and Rico has somehow reopened the panic meter before breakfast.",
+    "Rico: Because the panic meter is a public service, Mason. I am here for the people.",
+    "Elena: You are here for the overreaction. The people are just caught in the blast radius.",
+    "Mason: That's fair. Also, Elena laughed at that, which means we should mark the tape. Historic moment for the show.",
+    "Rico: She laughs every time I tell the truth. She just does it like she's grading a paper.",
+    "Elena: I laugh when you're accidentally insightful. It keeps the show fresh.",
+    `Mason: On the field, ${snapshot.teams[0].name} still looks like the team everyone is chasing, but ${snapshot.teams[1].name} is making this a real conversation.`,
+    "Rico: Real conversation? That's a title fight. That's two teams in the middle of the ring and one of them is carrying a folding chair.",
+    "Elena: And this is why I have to translate for the audience. What Rico means is the top-end talent is real, but roster balance may decide it.",
+    "Mason: Meanwhile, Waiver Wire Wizards spent seventeen dollars on Jackson Holliday, which means Rico has now started his annual April coronation segment.",
+    "Rico: Annual? Timeless. Some people see a waiver claim. I see destiny with middle infield eligibility.",
+    "Elena: Last week your destiny speech ended with you declaring the panic meter broken and then panicking for half an hour.",
+    `Mason: Also, ${snapshot.matchups[0].homeTeam} is flattening ${snapshot.matchups[0].awayTeam} this week, and I can already hear the disrespectful-before-breakfast trade offers being drafted as we speak.`,
+    "Rico: Good. Send them. Let chaos breathe.",
+    "Elena: And then act shocked when the group chat remembers who sent them. That's another beautiful league tradition.",
+    "Mason: That's the show. Rico is still crowning teams in April, Elena is still delivering drive-by reality checks, and the panic meter remains legally questionable. We'll catch you next time on The Backyard Bullpen."
   ].join("\n");
 
   const summary = [
-    "- Mason steered the show while calling back to Rico's habit of crowning teams too early.",
-    "- Rico went all in on the Jackson Holliday move and doubled down on the annual April coronation bit.",
-    `- Elena countered with steadier analysis and backed ${snapshot.teams[1].name} as a real contender for sustainable reasons.`,
-    "- The panic meter and disrespectful-before-breakfast trade offers both returned as recurring inside jokes."
+    "- Mason framed the episode as a proper Backyard Bullpen show open and steered the room through the familiar chaos.",
+    "- Rico revived the April coronation bit around the Jackson Holliday add and fully embraced the panic meter nonsense again.",
+    `- Elena played cleanup with dry humor and gave a more grounded read on ${snapshot.teams[1].name} as a real threat.`,
+    "- The panic meter, disrespectful-before-breakfast trade offers, and Elena's rare laughter all came back as running bits."
   ].join("\n");
   const memory = [
-    "Running jokes: Rico's annual April coronation, the broken panic meter, and the disrespectful-before-breakfast trade offer bit.",
-    "Host chemistry: Mason referees the room with amused frustration, Rico barges into takes at full speed, and Elena lands dry counters that make both of them crack up.",
-    `League storylines: ${snapshot.teams[0].name} looks like the current standard, while ${snapshot.teams[1].name} keeps getting real contender buzz because of roster balance.`
+    "Running jokes: Rico's annual April coronation, the panic meter, disrespectful-before-breakfast trade offers, and Mason noting every time Elena visibly enjoys the chaos.",
+    "Host chemistry: Mason plays ringmaster, Rico detonates takes on purpose, and Elena dryly punctures both of them before reluctantly laughing.",
+    `League storylines: ${snapshot.teams[0].name} still sets the pace, while ${snapshot.teams[1].name} keeps drawing contender talk because of roster balance and steady pressure.`
   ].join("\n");
 
   return {
