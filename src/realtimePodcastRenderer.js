@@ -107,8 +107,6 @@ function renderLineWithRealtime({ text, voice, instructions }) {
       sendEvent(ws, {
         type: "session.update",
         session: {
-          type: "realtime",
-          model: "gpt-realtime",
           output_modalities: ["audio"],
           audio: {
             output: {
