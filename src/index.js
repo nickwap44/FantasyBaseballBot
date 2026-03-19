@@ -2,6 +2,7 @@ import { Client, Events, GatewayIntentBits } from "discord.js";
 import { ensureBootstrapGuildConfig } from "./bootstrapConfig.js";
 import { handleCommand } from "./commands.js";
 import { config } from "./config.js";
+import { startFantasyLoop } from "./fantasyService.js";
 import { startReminderLoop } from "./reminderService.js";
 
 const client = new Client({
@@ -9,6 +10,7 @@ const client = new Client({
 });
 
 let reminderInterval;
+let fantasyInterval;
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
@@ -17,6 +19,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Bootstrap config ready for channel ${bootstrapConfig.channelId}`);
   }
   reminderInterval = startReminderLoop(readyClient, config.checkIntervalMs);
+  fantasyInterval = startFantasyLoop(readyClient, config.checkIntervalMs);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -50,6 +53,9 @@ client.on(Events.Error, (error) => {
 process.on("SIGINT", () => {
   if (reminderInterval) {
     clearInterval(reminderInterval);
+  }
+  if (fantasyInterval) {
+    clearInterval(fantasyInterval);
   }
 
   client.destroy();

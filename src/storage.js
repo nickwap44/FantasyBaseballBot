@@ -4,6 +4,7 @@ import path from "node:path";
 const dataDir = path.resolve("data");
 const guildConfigPath = path.join(dataDir, "guild-config.json");
 const reminderStatePath = path.join(dataDir, "reminder-state.json");
+const fantasyStatePath = path.join(dataDir, "fantasy-state.json");
 
 async function ensureDataDir() {
   await mkdir(dataDir, { recursive: true });
@@ -59,4 +60,20 @@ export async function markReminderSent(guildId, gameKey) {
 export async function wasReminderSent(guildId, gameKey) {
   const state = await getReminderState();
   return Boolean(state[guildId]?.[gameKey]);
+}
+
+export async function getFantasyState() {
+  return readJson(fantasyStatePath, {});
+}
+
+export async function saveFantasyState(nextState) {
+  await writeJson(fantasyStatePath, nextState);
+  return nextState;
+}
+
+export async function updateFantasyState(updater) {
+  const current = await getFantasyState();
+  const next = await updater(current);
+  await saveFantasyState(next);
+  return next;
 }

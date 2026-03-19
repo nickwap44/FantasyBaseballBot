@@ -1,7 +1,7 @@
 {
-  "name": "fantasy-baseball-bot",
+  "name": "fantasy-league-bot",
   "version": "1.0.0",
-  "description": "Discord bot that reminds fantasy baseball players to set their lineups one hour before the first MLB game.",
+  "description": "Discord bot for fantasy league reminders, ESPN recaps, social posts, and weekly podcasts.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "discord.js": "^14.19.3",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "lamejs": "^1.2.1"
   }
 }

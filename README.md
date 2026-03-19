@@ -1,6 +1,13 @@
-# Fantasy Baseball Discord Reminder Bot
+# Fantasy League Discord Bot
 
-This bot connects to a Discord server and posts a reminder one hour before the first MLB game of the day so your league can set lineups in time.
+This bot connects to a Discord server and can:
+
+- post MLB lineup reminders
+- pull data from a private ESPN fantasy football league
+- generate daily transaction summaries
+- post weekly power rankings
+- post social-style league reactions
+- generate a weekly AI podcast transcript plus MP3 upload
 
 ## What it does
 
@@ -8,21 +15,26 @@ This bot connects to a Discord server and posts a reminder one hour before the f
 - Registers slash commands for server setup
 - Stores reminder settings per guild in local JSON files
 - Checks the official MLB schedule and posts one reminder one hour before first pitch
+- Connects to ESPN private fantasy football leagues using `ESPN_SWID` and `ESPN_S2`
+- Uses OpenAI to generate text content and a weekly podcast MP3
 
 ## Requirements
 
 - Node.js 20 or newer
 - A Discord application with a bot user
 - Permission to invite the bot to your server with `bot` and `applications.commands` scopes
+- An OpenAI API key for the fantasy content features
+- ESPN fantasy league cookies for private leagues
 
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Fill in `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, and `DISCORD_GUILD_ID`.
-3. Optionally set `DEFAULT_REMINDER_CHANNEL_ID` so a fresh deploy already knows where to post.
-4. Install dependencies with `npm install`.
-5. Register slash commands with `npm run deploy-commands`.
-6. Start the bot with `npm start`.
+2. Fill in the Discord values.
+3. Add the ESPN and OpenAI values if you want the fantasy football features.
+4. Optionally set the default channel IDs so a fresh deploy already knows where to post.
+5. Install dependencies with `npm install`.
+6. Register slash commands with `npm run deploy-commands`.
+7. Start the bot with `npm start`.
 
 ## Discord setup
 
@@ -34,6 +46,9 @@ After the bot joins your server, run these slash commands:
 - `/reminder-timezone` to choose the display timezone
 - `/reminder-message` to customize the intro text
 - `/reminder-status` to confirm the current setup
+- `/fantasy-channel` to assign the transactions, power, social, or podcast channels
+- `/fantasy-status` to confirm the fantasy feature setup
+- `/fantasy-test` to run an ESPN check or generate sample content
 
 ## Notes
 
@@ -41,4 +56,6 @@ After the bot joins your server, run these slash commands:
 - By default it reminds one hour before the earliest upcoming game across MLB.
 - Reminder state is stored in `data/guild-config.json` and `data/reminder-state.json`.
 - On hosts with ephemeral disks, set `DEFAULT_REMINDER_CHANNEL_ID` so the reminder channel is restored automatically after redeploys.
+- Fantasy job state is stored in `data/fantasy-state.json`.
+- The weekly fantasy podcast uses AI-generated voices and should be disclosed as AI-generated audio.
 - If the bot was offline during the reminder window, it will not backfill the missed reminder.

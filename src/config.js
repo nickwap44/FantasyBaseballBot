@@ -27,5 +27,15 @@ export const config = {
   discordGuildId: getRequiredEnv("DISCORD_GUILD_ID"),
   defaultTimezone: process.env.DEFAULT_TIMEZONE || "America/Los_Angeles",
   defaultReminderChannelId: process.env.DEFAULT_REMINDER_CHANNEL_ID || null,
+  transactionsChannelId: process.env.DISCORD_TRANSACTIONS_CHANNEL_ID || null,
+  powerRankingsChannelId: process.env.DISCORD_POWER_RANKINGS_CHANNEL_ID || null,
+  socialChannelId: process.env.DISCORD_SOCIAL_CHANNEL_ID || null,
+  podcastChannelId: process.env.DISCORD_PODCAST_CHANNEL_ID || null,
   checkIntervalMs: getOptionalNumber("CHECK_INTERVAL_MS", 60_000)
+  ,
+  espnLeagueId: process.env.ESPN_LEAGUE_ID || null,
+  espnSeason: getOptionalNumber("ESPN_SEASON", new Date().getFullYear()),
+  espnSwid: process.env.ESPN_SWID || null,
+  espnS2: process.env.ESPN_S2 || null,
+  openAiApiKey: process.env.OPENAI_API_KEY || null
 };

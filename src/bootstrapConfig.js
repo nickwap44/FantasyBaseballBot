@@ -10,7 +10,13 @@ export async function ensureBootstrapGuildConfig() {
     timezone: existing?.timezone || appConfig.defaultTimezone,
     channelId: existing?.channelId || appConfig.defaultReminderChannelId,
     roleId: existing?.roleId || null,
-    customMessage: existing?.customMessage || null
+    customMessage: existing?.customMessage || null,
+    transactionsChannelId:
+      existing?.transactionsChannelId || appConfig.transactionsChannelId,
+    powerRankingsChannelId:
+      existing?.powerRankingsChannelId || appConfig.powerRankingsChannelId,
+    socialChannelId: existing?.socialChannelId || appConfig.socialChannelId,
+    podcastChannelId: existing?.podcastChannelId || appConfig.podcastChannelId
   };
 
   if (!nextConfig.channelId) {
@@ -23,7 +29,11 @@ export async function ensureBootstrapGuildConfig() {
     existing.timezone !== nextConfig.timezone ||
     existing.channelId !== nextConfig.channelId ||
     existing.roleId !== nextConfig.roleId ||
-    existing.customMessage !== nextConfig.customMessage;
+    existing.customMessage !== nextConfig.customMessage ||
+    existing.transactionsChannelId !== nextConfig.transactionsChannelId ||
+    existing.powerRankingsChannelId !== nextConfig.powerRankingsChannelId ||
+    existing.socialChannelId !== nextConfig.socialChannelId ||
+    existing.podcastChannelId !== nextConfig.podcastChannelId;
 
   if (changed) {
     await saveGuildConfig(guildId, nextConfig);

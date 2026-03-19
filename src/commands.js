@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { config as appConfig } from "./config.js";
 import { getGuildConfig, saveGuildConfig } from "./storage.js";
+import { handleFantasyTest } from "./fantasyService.js";
 
 function getDefaultGuildConfig() {
   return {
@@ -12,7 +13,11 @@ function getDefaultGuildConfig() {
     timezone: appConfig.defaultTimezone,
     channelId: null,
     roleId: null,
-    customMessage: null
+    customMessage: null,
+    transactionsChannelId: appConfig.transactionsChannelId,
+    powerRankingsChannelId: appConfig.powerRankingsChannelId,
+    socialChannelId: appConfig.socialChannelId,
+    podcastChannelId: appConfig.podcastChannelId
   };
 }
 
@@ -74,7 +79,50 @@ export const commandDefinitions = [
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
     .setName("reminder-status")
-    .setDescription("Show the current lineup reminder configuration.")
+    .setDescription("Show the current lineup reminder configuration."),
+  new SlashCommandBuilder()
+    .setName("fantasy-channel")
+    .setDescription("Set which channel is used for each fantasy feature.")
+    .addStringOption((option) =>
+      option
+        .setName("feature")
+        .setDescription("Which feature you want to configure.")
+        .setRequired(true)
+        .addChoices(
+          { name: "transactions", value: "transactions" },
+          { name: "power", value: "power" },
+          { name: "social", value: "social" },
+          { name: "podcast", value: "podcast" }
+        )
+    )
+    .addChannelOption((option) =>
+      option
+        .setName("channel")
+        .setDescription("The text channel for this feature.")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("fantasy-status")
+    .setDescription("Show the current ESPN and fantasy content channel setup."),
+  new SlashCommandBuilder()
+    .setName("fantasy-test")
+    .setDescription("Run a live test against ESPN or generate a sample content post.")
+    .addStringOption((option) =>
+      option
+        .setName("type")
+        .setDescription("What to test.")
+        .setRequired(true)
+        .addChoices(
+          { name: "espn", value: "espn" },
+          { name: "transactions", value: "transactions" },
+          { name: "power", value: "power" },
+          { name: "social", value: "social" },
+          { name: "podcast", value: "podcast" }
+        )
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 ];
 
 function isValidTimezone(timezone) {
@@ -175,6 +223,50 @@ export async function handleCommand(interaction) {
         `Custom message: ${guildConfig.customMessage || "none"}`
       ].join("\n"),
       ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "fantasy-channel") {
+    const feature = interaction.options.getString("feature", true);
+    const channel = interaction.options.getChannel("channel", true);
+    const keyMap = {
+      transactions: "transactionsChannelId",
+      power: "powerRankingsChannelId",
+      social: "socialChannelId",
+      podcast: "podcastChannelId"
+    };
+
+    guildConfig[keyMap[feature]] = channel.id;
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: `${feature} posts will go to <#${channel.id}>.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "fantasy-status") {
+    await interaction.reply({
+      content: [
+        `ESPN league ID configured: ${appConfig.espnLeagueId ? "yes" : "no"}`,
+        `OpenAI key configured: ${appConfig.openAiApiKey ? "yes" : "no"}`,
+        `Transactions channel: ${guildConfig.transactionsChannelId ? `<#${guildConfig.transactionsChannelId}>` : "not set"}`,
+        `Power rankings channel: ${guildConfig.powerRankingsChannelId ? `<#${guildConfig.powerRankingsChannelId}>` : "not set"}`,
+        `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,
+        `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`
+      ].join("\n"),
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "fantasy-test") {
+    await interaction.deferReply({ ephemeral: true });
+    const testType = interaction.options.getString("type", true);
+    const result = await handleFantasyTest(testType, guildId, interaction.client);
+    await interaction.editReply({
+      content: result
     });
   }
 }
