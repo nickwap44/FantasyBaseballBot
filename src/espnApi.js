@@ -1,6 +1,11 @@
 import { config } from "./config.js";
 
-const ESPN_BASE_URL = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
+const SPORT_CODE_MAP = {
+  baseball: "flb",
+  football: "ffl",
+  basketball: "fba",
+  hockey: "fhl"
+};
 
 function getEspnCookieHeader() {
   if (!config.espnS2 || !config.espnSwid) {
@@ -15,8 +20,9 @@ async function fetchLeague(views) {
     throw new Error("ESPN league ID is missing.");
   }
 
+  const sportCode = SPORT_CODE_MAP[config.espnSport] || config.espnSport;
   const url = new URL(
-    `${ESPN_BASE_URL}/seasons/${config.espnSeason}/segments/0/leagues/${config.espnLeagueId}`
+    `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${sportCode}/seasons/${config.espnSeason}/segments/0/leagues/${config.espnLeagueId}`
   );
 
   for (const view of views) {
@@ -158,6 +164,7 @@ export async function getLeagueSnapshot() {
 export async function testEspnConnection() {
   const snapshot = await getLeagueSnapshot();
   return {
+    sport: config.espnSport,
     leagueId: snapshot.id,
     seasonId: snapshot.seasonId,
     teamCount: snapshot.teams.length,

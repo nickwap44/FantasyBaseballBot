@@ -60,7 +60,7 @@ function matchupBlock(matchups) {
 export async function buildTransactionsSummary(snapshot, timezone) {
   return generateText({
     systemPrompt:
-      "You are an entertaining but accurate fantasy football league reporter. Write a concise daily transaction recap for Discord with a headline and 3-5 bullets.",
+      "You are an entertaining but accurate fantasy baseball league reporter. Write a concise daily transaction recap for Discord with a headline and 3-5 bullets. If there is no activity yet, say that the league is still quiet and preview what managers should watch for.",
     userPrompt: [
       `League transaction activity as of ${formatDateTime(new Date(), timezone)}:`,
       recentTransactionsBlock(snapshot.transactions)
@@ -69,9 +69,13 @@ export async function buildTransactionsSummary(snapshot, timezone) {
 }
 
 export async function buildPowerRankings(snapshot, timezone) {
+  if (snapshot.teams.length === 0) {
+    return "No teams are populated in ESPN yet, so power rankings will unlock after the draft loads into the league.";
+  }
+
   return generateText({
     systemPrompt:
-      "You are a sharp fantasy football columnist. Write weekly power rankings for Discord. Include two sections: current performance rankings and strongest rosters right now. Be punchy but grounded in the data.",
+      "You are a sharp fantasy baseball columnist. Write weekly power rankings for Discord. Include two sections: current performance rankings and strongest rosters right now. Be punchy but grounded in the data.",
     userPrompt: [
       `Generate power rankings as of ${formatDateTime(new Date(), timezone)}.`,
       "Standings:",
@@ -89,7 +93,7 @@ export async function buildPowerRankings(snapshot, timezone) {
 export async function buildSocialPost(snapshot, timezone) {
   return generateText({
     systemPrompt:
-      "You write one fake social-media post for a fantasy football league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap.",
+      "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk.",
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       "Recent transactions:",
@@ -103,7 +107,7 @@ export async function buildSocialPost(snapshot, timezone) {
 
 function buildPodcastPrompt(snapshot, historyText, timezone) {
   return [
-    "Write a fantasy football podcast transcript for three hosts.",
+    "Write a fantasy baseball podcast transcript for three hosts.",
     "Host 1: Mason, the straight man and lead host. He runs the show and introduces segments.",
     "Host 2: Rico, the hot take artist who overreacts and flies off the handle.",
     "Host 3: Elena, the steady analyst who grounds everything in evidence.",
@@ -162,7 +166,7 @@ function getVoiceForSpeaker(speaker) {
 export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a comedy-inflected fantasy football podcast. Make the dialogue lively, specific, and rooted in the supplied league data.",
+      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter.",
     userPrompt: buildPodcastPrompt(snapshot, podcastHistory, timezone),
     temperature: 1
   });
@@ -184,7 +188,7 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
   const transcriptBuffer = Buffer.from(transcript, "utf8");
   const summary = await generateText({
     systemPrompt:
-      "Summarize a fantasy football podcast transcript in 4 short bullets. Preserve any running jokes or callbacks.",
+      "Summarize a fantasy baseball podcast transcript in 4 short bullets. Preserve any running jokes or callbacks.",
     userPrompt: transcript
   });
 

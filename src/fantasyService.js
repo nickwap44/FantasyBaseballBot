@@ -165,12 +165,18 @@ export async function handleFantasyTest(testType, guildId, client) {
   if (testType === "espn") {
     const result = await testEspnConnection();
     return [
-      `Connected to ESPN league \`${result.leagueId}\` for season \`${result.seasonId}\`.`,
+      `Connected to ESPN ${result.sport} league \`${result.leagueId}\` for season \`${result.seasonId}\`.`,
       `Teams found: ${result.teamCount}`,
       `Current scoring period: ${result.currentScoringPeriod}`,
       "",
-      "Recent transactions:",
-      ...result.recentTransactions.map((transaction) => `- ${transaction.teamName}: ${transaction.type}`)
+      ...(result.recentTransactions.length > 0
+        ? [
+            "Recent transactions:",
+            ...result.recentTransactions.map(
+              (transaction) => `- ${transaction.teamName}: ${transaction.type}`
+            )
+          ]
+        : ["No recent transactions were returned yet. That can be normal before the draft or before league activity starts."])
     ].join("\n");
   }
 

@@ -3,7 +3,7 @@
 This bot connects to a Discord server and can:
 
 - post MLB lineup reminders
-- pull data from a private ESPN fantasy football league
+- pull data from a private ESPN fantasy baseball league
 - generate daily transaction summaries
 - post weekly power rankings
 - post social-style league reactions
@@ -30,7 +30,7 @@ This bot connects to a Discord server and can:
 
 1. Copy `.env.example` to `.env`.
 2. Fill in the Discord values.
-3. Add the ESPN and OpenAI values if you want the fantasy football features.
+3. Add the ESPN and OpenAI values if you want the fantasy baseball features.
 4. Optionally set the default channel IDs so a fresh deploy already knows where to post.
 5. Install dependencies with `npm install`.
 6. Register slash commands with `npm run deploy-commands`.
@@ -58,4 +58,5 @@ After the bot joins your server, run these slash commands:
 - On hosts with ephemeral disks, set `DEFAULT_REMINDER_CHANNEL_ID` so the reminder channel is restored automatically after redeploys.
 - Fantasy job state is stored in `data/fantasy-state.json`.
 - The weekly fantasy podcast uses AI-generated voices and should be disclosed as AI-generated audio.
+- Set `ESPN_SPORT=baseball` for ESPN fantasy baseball leagues.
 - If the bot was offline during the reminder window, it will not backfill the missed reminder.

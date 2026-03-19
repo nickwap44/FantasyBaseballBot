@@ -35,6 +35,7 @@ export const config = {
   ,
   espnLeagueId: process.env.ESPN_LEAGUE_ID || null,
   espnSeason: getOptionalNumber("ESPN_SEASON", new Date().getFullYear()),
+  espnSport: process.env.ESPN_SPORT || "baseball",
   espnSwid: process.env.ESPN_SWID || null,
   espnS2: process.env.ESPN_S2 || null,
   openAiApiKey: process.env.OPENAI_API_KEY || null
