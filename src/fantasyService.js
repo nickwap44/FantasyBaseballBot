@@ -1,6 +1,10 @@
 import { getGuildConfig, getGuildConfigs, getFantasyState, saveFantasyState } from "./storage.js";
 import { getLeagueSnapshot, testEspnConnection } from "./espnApi.js";
 import {
+  buildDemoPodcastPackage,
+  buildDemoPowerRankings,
+  buildDemoSocialPost,
+  buildDemoTransactionsSummary,
   buildPodcastPackage,
   buildPowerRankings,
   buildSocialPost,
@@ -203,7 +207,9 @@ export async function handleFantasyTest(testType, guildId, client) {
   const normalizedType = testType.replace("demo-", "");
 
   if (normalizedType === "transactions") {
-    const content = await buildTransactionsSummary(snapshot, timezone);
+    const content = testType.startsWith("demo-")
+      ? buildDemoTransactionsSummary(snapshot, timezone)
+      : await buildTransactionsSummary(snapshot, timezone);
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
       return "Demo transaction recap posted.";
@@ -213,7 +219,9 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "power") {
-    const content = await buildPowerRankings(snapshot, timezone);
+    const content = testType.startsWith("demo-")
+      ? buildDemoPowerRankings(snapshot, timezone)
+      : await buildPowerRankings(snapshot, timezone);
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "power", content);
       return "Demo power rankings posted.";
@@ -223,7 +231,9 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "social") {
-    const content = await buildSocialPost(snapshot, timezone);
+    const content = testType.startsWith("demo-")
+      ? buildDemoSocialPost(snapshot, timezone)
+      : await buildSocialPost(snapshot, timezone);
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "social", content);
       return "Demo social post sent.";
@@ -233,7 +243,9 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "podcast") {
-    const podcast = await buildPodcastPackage(snapshot, "", timezone);
+    const podcast = testType.startsWith("demo-")
+      ? await buildDemoPodcastPackage(snapshot, timezone)
+      : await buildPodcastPackage(snapshot, "", timezone);
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
       throw new Error("Podcast channel is not configured.");

@@ -267,10 +267,17 @@ export async function handleCommand(interaction) {
 
   if (interaction.commandName === "fantasy-test") {
     await interaction.deferReply({ ephemeral: true });
-    const testType = interaction.options.getString("type", true);
-    const result = await handleFantasyTest(testType, guildId, interaction.client);
-    await interaction.editReply({
-      content: result
-    });
+    try {
+      const testType = interaction.options.getString("type", true);
+      const result = await handleFantasyTest(testType, guildId, interaction.client);
+      await interaction.editReply({
+        content: result
+      });
+    } catch (error) {
+      await interaction.editReply({
+        content: `Fantasy test failed: ${error.message || "Unknown error"}`
+      });
+    }
+    return;
   }
 }

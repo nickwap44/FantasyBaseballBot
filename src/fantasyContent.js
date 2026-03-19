@@ -68,6 +68,21 @@ export async function buildTransactionsSummary(snapshot, timezone) {
   });
 }
 
+export function buildDemoTransactionsSummary(snapshot, timezone) {
+  return [
+    `**Daily Transactions Demo**`,
+    `Generated for ${formatDateTime(new Date(), timezone)}`,
+    "",
+    ...snapshot.transactions.slice(0, 3).map((transaction) => {
+      const players = transaction.players.map((player) => `${player.type} ${player.name}`).join(", ");
+      const bid = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
+      return `- ${transaction.teamName} made a ${transaction.type.toLowerCase()}${bid}: ${players}`;
+    }),
+    "",
+    "Takeaway: the waiver wire is already getting spicy, and managers are starting to show their tells."
+  ].join("\n");
+}
+
 export async function buildPowerRankings(snapshot, timezone) {
   if (snapshot.teams.length === 0) {
     return "No teams are populated in ESPN yet, so power rankings will unlock after the draft loads into the league.";
@@ -90,6 +105,25 @@ export async function buildPowerRankings(snapshot, timezone) {
   });
 }
 
+export function buildDemoPowerRankings(snapshot, timezone) {
+  const ranked = [...snapshot.teams]
+    .sort((left, right) => scoreTeamStrength(right) - scoreTeamStrength(left))
+    .slice(0, 5);
+
+  return [
+    `**Weekly Power Rankings Demo**`,
+    `Generated for ${formatDateTime(new Date(), timezone)}`,
+    "",
+    ...ranked.map(
+      (team, index) =>
+        `${index + 1}. ${team.name} (${team.manager}) - ${team.wins}-${team.losses}, PF ${team.pointsFor.toFixed(1)}`
+    ),
+    "",
+    `Biggest riser: ${ranked[1]?.name || ranked[0]?.name}`,
+    `Most complete roster right now: ${ranked[0]?.name}`
+  ].join("\n");
+}
+
 export async function buildSocialPost(snapshot, timezone) {
   return generateText({
     systemPrompt:
@@ -103,6 +137,16 @@ export async function buildSocialPost(snapshot, timezone) {
       standingsBlock(snapshot.teams.slice(0, 6))
     ].join("\n")
   });
+}
+
+export function buildDemoSocialPost(snapshot, timezone) {
+  const topTransaction = snapshot.transactions[0];
+  return [
+    `**Social Feed Demo**`,
+    `Posted ${formatDateTime(new Date(), timezone)}`,
+    "",
+    `"Waiver Wire Wizards just dropped $${topTransaction.biddingAmount} on Jackson Holliday like they're one move away from a dynasty. Respect the aggression, fear the hubris."`
+  ].join("\n");
 }
 
 function buildPodcastPrompt(snapshot, historyText, timezone) {
@@ -200,6 +244,52 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone) {
     }),
     transcriptAttachment: new AttachmentBuilder(transcriptBuffer, {
       name: `fantasy-podcast-week-${snapshot.currentScoringPeriod}.txt`
+    })
+  };
+}
+
+export async function buildDemoPodcastPackage(snapshot, timezone) {
+  const transcript = [
+    "Mason: Welcome back to the league podcast, where the standings are tight and the waiver claims are somehow even tighter.",
+    "Rico: I am telling you right now, the Waiver Wire Wizards are drunk on power after that Jackson Holliday pickup.",
+    "Elena: It was aggressive, but not irrational. They needed upside, and they found it.",
+    `Mason: The current top of the table is ${snapshot.teams[0].name}, but ${snapshot.teams[1].name} is hanging right there and looks like a real threat.`,
+    "Rico: Threat? They're lurking. That's a horror movie roster. Nobody wants that in a playoff bracket.",
+    "Elena: The more interesting question is whether the middle tier has enough pitching depth to keep up over six months.",
+    `Mason: Meanwhile, ${snapshot.matchups[0].homeTeam} is putting a number on ${snapshot.matchups[0].awayTeam} this week, and that's going to get people talking.`,
+    "Rico: Talking? I'm yelling. Some of these bottom teams are already managing like it's July.",
+    "Elena: Small sample caveat, but yes, some managers are definitely chasing too hard too early.",
+    "Mason: That's it for this week's demo episode. Stay active, trust your process, and please stop offering lopsided trades before breakfast."
+  ].join("\n");
+
+  const summary = [
+    "- Mason framed the week around tightening standings and active waiver movement.",
+    "- Rico exploded over Waiver Wire Wizards going big on Jackson Holliday.",
+    `- Elena flagged ${snapshot.teams[1].name} as a serious contender with sustainable upside.`,
+    `- The hosts closed on ${snapshot.matchups[0].homeTeam} looking like the team to beat right now.`
+  ].join("\n");
+
+  const lines = parseTranscriptLines(transcript);
+  const wavBuffers = [];
+
+  for (const line of lines) {
+    wavBuffers.push(
+      await generateSpeech({
+        text: line.text,
+        voice: getVoiceForSpeaker(line.speaker),
+        format: "wav"
+      })
+    );
+  }
+
+  return {
+    transcript,
+    summary,
+    audioAttachment: new AttachmentBuilder(combineWavBuffersToMp3(wavBuffers), {
+      name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
+    }),
+    transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {
+      name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.txt`
     })
   };
 }
