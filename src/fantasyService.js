@@ -106,14 +106,14 @@ async function sendFeatureMessage(client, guildConfig, feature, snapshot, state)
   }
 
   if (feature === "podcast") {
-    const previousSummary = state.podcastHistory?.slice(-3).join("\n\n") || "";
+    const previousMemory = state.podcastMemoryHistory?.slice(-4).join("\n\n") || "";
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
         ? "realtime"
         : "tts";
     const podcast = await buildPodcastPackage(
       snapshot,
-      previousSummary,
+      previousMemory,
       guildConfig.timezone,
       renderer
     );
@@ -129,7 +129,8 @@ async function sendFeatureMessage(client, guildConfig, feature, snapshot, state)
 
     return {
       ...state,
-      podcastHistory: [...(state.podcastHistory || []), podcast.summary].slice(-6)
+      podcastHistory: [...(state.podcastHistory || []), podcast.summary].slice(-6),
+      podcastMemoryHistory: [...(state.podcastMemoryHistory || []), podcast.memory].slice(-8)
     };
   }
 

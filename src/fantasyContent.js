@@ -159,7 +159,10 @@ function buildPodcastPrompt(snapshot, historyText, timezone) {
     "Host 3: Elena, the steady analyst who grounds everything in evidence.",
     "Keep the total transcript in the 5-10 minute range, roughly 700-1200 words.",
     "Include a cold open, one standings segment, one matchup/results segment, one transactions/news segment, and one closing prediction segment.",
-    "The hosts should sound like they know each other and reference prior talking points naturally.",
+    "The hosts should sound like long-time friends and recurring co-hosts who know each other's rhythms.",
+    "They should tease each other, laugh, interrupt lightly, and keep a few running jokes alive across episodes.",
+    "Use the memory block as canon for inside jokes, unresolved debates, and recurring bits.",
+    "Include at least two playful callbacks or inside-joke moments when the memory block gives you something to use.",
     "Make every line start with the speaker name followed by a colon.",
     "Write for spoken audio, not for reading.",
     "Use short, natural sentences and contractions.",
@@ -205,22 +208,22 @@ function parseTranscriptLines(transcript) {
 export function getVoiceForSpeaker(speaker, renderer = "tts") {
   const normalized = speaker.toLowerCase();
   if (renderer === "realtime") {
-    if (normalized.includes("rico")) {
+    if (normalized.includes("mason")) {
       return "cedar";
     }
 
-    if (normalized.includes("elena")) {
+    if (normalized.includes("rico")) {
       return "ash";
     }
 
     return "marin";
   }
 
-  if (normalized.includes("rico")) {
+  if (normalized.includes("mason")) {
     return "cedar";
   }
 
-  if (normalized.includes("elena")) {
+  if (normalized.includes("rico")) {
     return "ash";
   }
 
@@ -234,21 +237,22 @@ export function getVoiceInstructionsForSpeaker(speaker) {
     return [
       "Sound energetic, impulsive, and a little unhinged in a fun sports-radio way.",
       "Punch key words, vary pacing, and lean into hot-take confidence.",
+      "Let quick laughs, incredulous scoffs, and playful jabs come through naturally.",
       "Keep it natural and conversational, not announcer-stiff."
     ].join(" ");
   }
 
   if (normalized.includes("elena")) {
     return [
-      "Sound calm, grounded, and analytically sharp.",
-      "Use a warm, measured delivery with steady pacing and subtle emphasis.",
-      "Keep it natural, thoughtful, and easy to follow."
+      "Sound calm, grounded, and analytically sharp with a warm, natural cadence.",
+      "Use a measured delivery, but let dry humor and knowing amusement slip through sometimes.",
+      "Keep it thoughtful, human, and easy to follow."
     ].join(" ");
   }
 
   return [
-    "Sound like a polished but relaxed podcast host.",
-    "Be confident, conversational, and smooth, with crisp pacing and natural emphasis.",
+    "Sound like a polished but relaxed podcast host with easy chemistry.",
+    "Be confident, conversational, and smooth, with crisp pacing, natural emphasis, and the occasional amused laugh.",
     "Keep the delivery friendly and human, not robotic or overly theatrical."
   ].join(" ");
 }
@@ -286,6 +290,14 @@ async function buildPodcastAudio(transcript, renderer) {
   return buildTtsPodcastAudio(transcript);
 }
 
+async function buildPodcastMemory(transcript) {
+  return generateText({
+    systemPrompt:
+      "Extract durable podcast memory for future episodes. Return three short sections titled Running jokes, Host chemistry, and League storylines. Keep it concise and specific.",
+    userPrompt: transcript
+  });
+}
+
 export async function buildPodcastPackage(snapshot, podcastHistory, timezone, renderer = config.podcastRenderer) {
   const transcript = await generateText({
     systemPrompt:
@@ -301,10 +313,12 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone, re
       "Summarize a fantasy baseball podcast transcript in 4 short bullets. Preserve any running jokes or callbacks.",
     userPrompt: transcript
   });
+  const memory = await buildPodcastMemory(transcript);
 
   return {
     transcript,
     summary,
+    memory,
     audioAttachment: new AttachmentBuilder(mp3Buffer, {
       name: `fantasy-podcast-week-${snapshot.currentScoringPeriod}.mp3`
     }),
@@ -338,10 +352,16 @@ export async function buildDemoPodcastPackage(
     `- Elena flagged ${snapshot.teams[1].name} as a serious contender with sustainable upside.`,
     `- The hosts closed on ${snapshot.matchups[0].homeTeam} looking like the team to beat right now.`
   ].join("\n");
+  const memory = [
+    "Running jokes: Rico keeps trying to crown a team after one hot week, and Mason keeps shutting down the panic meter.",
+    "Host chemistry: Mason plays traffic cop, Rico fires from the hip, Elena dryly cleans up the mess.",
+    `League storylines: ${snapshot.teams[0].name} looks like the early standard, while ${snapshot.teams[1].name} keeps getting contender buzz.`
+  ].join("\n");
 
   return {
     transcript,
     summary,
+    memory,
     audioAttachment: new AttachmentBuilder(await buildPodcastAudio(transcript, renderer), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
     }),
