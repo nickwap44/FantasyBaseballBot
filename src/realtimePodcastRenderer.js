@@ -107,47 +107,32 @@ function renderLineWithRealtime({ text, voice, instructions }) {
       sendEvent(ws, {
         type: "session.update",
         session: {
-          output_modalities: ["audio"],
-          audio: {
-            output: {
-              format: {
-                type: "audio/pcm",
-                rate: PCM_SAMPLE_RATE
-              },
-              voice
-            }
-          },
+          modalities: ["audio"],
+          output_audio_format: "pcm16",
+          voice,
           instructions: buildSessionInstructions(instructions)
-        }
-      });
-
-      sendEvent(ws, {
-        type: "conversation.item.create",
-        item: {
-          type: "message",
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text
-            }
-          ]
         }
       });
 
       sendEvent(ws, {
         type: "response.create",
         response: {
-          output_modalities: ["audio"],
-          audio: {
-            output: {
-              format: {
-                type: "audio/pcm",
-                rate: PCM_SAMPLE_RATE
-              },
-              voice
+          conversation: "none",
+          modalities: ["audio"],
+          output_audio_format: "pcm16",
+          voice,
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text
+                }
+              ]
             }
-          }
+          ]
         }
       });
     } catch (error) {
