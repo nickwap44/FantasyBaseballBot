@@ -334,28 +334,32 @@ export async function buildDemoPodcastPackage(
   renderer = config.podcastRenderer
 ) {
   const transcript = [
-    "Mason: Welcome back to the league podcast, where the standings are tight and the waiver claims are somehow even tighter.",
-    "Rico: I am telling you right now, the Waiver Wire Wizards are drunk on power after that Jackson Holliday pickup.",
-    "Elena: It was aggressive, but not irrational. They needed upside, and they found it.",
-    `Mason: The current top of the table is ${snapshot.teams[0].name}, but ${snapshot.teams[1].name} is hanging right there and looks like a real threat.`,
-    "Rico: Threat? They're lurking. That's a horror movie roster. Nobody wants that in a playoff bracket.",
-    "Elena: The more interesting question is whether the middle tier has enough pitching depth to keep up over six months.",
-    `Mason: Meanwhile, ${snapshot.matchups[0].homeTeam} is putting a number on ${snapshot.matchups[0].awayTeam} this week, and that's going to get people talking.`,
-    "Rico: Talking? I'm yelling. Some of these bottom teams are already managing like it's July.",
-    "Elena: Small sample caveat, but yes, some managers are definitely chasing too hard too early.",
-    "Mason: That's it for this week's demo episode. Stay active, trust your process, and please stop offering lopsided trades before breakfast."
+    "Mason: Welcome back to the league podcast. The standings are tight, Rico is already trying to hand out a trophy in April, and somehow Elena is still pretending she's not enjoying this.",
+    "Rico: Pretending? Elena loves it. She just smiles like a Bond villain instead of yelling like I do.",
+    "Elena: That is not true. I smile like a person watching you declare a dynasty every time someone wins two waiver claims in a row.",
+    "Mason: There it is. Thirty seconds in and we're already back to Rico's annual April coronation.",
+    "Rico: Because I have vision, Mason. Waiver Wire Wizards dropped seventeen bucks on Jackson Holliday and I can feel history happening.",
+    "Elena: You felt history last week when you said the panic meter was broken, and then you immediately panicked for twelve straight minutes.",
+    "Mason: We do need to put the panic meter on a T-shirt at this point. That's become a real problem for the league.",
+    `Mason: Anyway, ${snapshot.teams[0].name} is sitting on top right now, but ${snapshot.teams[1].name} is close enough to make this interesting fast.`,
+    "Rico: Close enough? They're lurking. That's a roster that walks into the room and steals your lunch money.",
+    "Elena: The offense is real, but the bigger thing is roster balance. They don't need hero-ball from one superstar every night.",
+    `Mason: And meanwhile ${snapshot.matchups[0].homeTeam} is putting a pretty loud number on ${snapshot.matchups[0].awayTeam} this week, which is going to restart every group chat argument we already had on Sunday.`,
+    "Rico: Good. That's what the league is for. Mild overreaction, selective memory, and one truly disrespectful trade offer before breakfast.",
+    "Elena: Which, for the record, is still the funniest running bit in this league because none of you think you're the one sending the disrespectful offer.",
+    "Mason: That's the show. Rico is crowning teams, Elena is rolling her eyes in 4K, and the panic meter remains deeply compromised. We'll see you next episode."
   ].join("\n");
 
   const summary = [
-    "- Mason framed the week around tightening standings and active waiver movement.",
-    "- Rico exploded over Waiver Wire Wizards going big on Jackson Holliday.",
-    `- Elena flagged ${snapshot.teams[1].name} as a serious contender with sustainable upside.`,
-    `- The hosts closed on ${snapshot.matchups[0].homeTeam} looking like the team to beat right now.`
+    "- Mason steered the show while calling back to Rico's habit of crowning teams too early.",
+    "- Rico went all in on the Jackson Holliday move and doubled down on the annual April coronation bit.",
+    `- Elena countered with steadier analysis and backed ${snapshot.teams[1].name} as a real contender for sustainable reasons.`,
+    "- The panic meter and disrespectful-before-breakfast trade offers both returned as recurring inside jokes."
   ].join("\n");
   const memory = [
-    "Running jokes: Rico keeps trying to crown a team after one hot week, and Mason keeps shutting down the panic meter.",
-    "Host chemistry: Mason plays traffic cop, Rico fires from the hip, Elena dryly cleans up the mess.",
-    `League storylines: ${snapshot.teams[0].name} looks like the early standard, while ${snapshot.teams[1].name} keeps getting contender buzz.`
+    "Running jokes: Rico's annual April coronation, the broken panic meter, and the disrespectful-before-breakfast trade offer bit.",
+    "Host chemistry: Mason referees the room with amused frustration, Rico barges into takes at full speed, and Elena lands dry counters that make both of them crack up.",
+    `League storylines: ${snapshot.teams[0].name} looks like the current standard, while ${snapshot.teams[1].name} keeps getting real contender buzz because of roster balance.`
   ].join("\n");
 
   return {
