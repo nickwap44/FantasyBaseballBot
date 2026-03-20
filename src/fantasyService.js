@@ -21,6 +21,7 @@ import {
   buildTransactionsSummary
 } from "./fantasyContent.js";
 import { config } from "./config.js";
+import { savePodcastEpisode } from "./database.js";
 import { getMockLeagueSnapshot } from "./mockLeague.js";
 import { getDateInTimezone } from "./time.js";
 
@@ -196,6 +197,15 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
         podcast.summary
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
+    });
+    await savePodcastEpisode({
+      guildId,
+      episodeKind: "weekly",
+      renderer,
+      title: "The Backyard Bullpen",
+      summary: podcast.summary,
+      memory: podcast.memory,
+      transcript: podcast.transcript
     });
 
     return {
@@ -397,6 +407,15 @@ export async function handleFantasyTest(testType, guildId, client) {
         podcast.summary
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
+    });
+    await savePodcastEpisode({
+      guildId,
+      episodeKind: testType.startsWith("demo-") ? "demo" : "manual",
+      renderer,
+      title: "The Backyard Bullpen",
+      summary: podcast.summary,
+      memory: podcast.memory,
+      transcript: podcast.transcript
     });
 
     return "Podcast test episode posted.";

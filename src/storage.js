@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { loadAppState, saveAppState } from "./database.js";
 
 const dataDir = path.resolve("data");
 const guildConfigPath = path.join(dataDir, "guild-config.json");
@@ -24,13 +25,29 @@ async function readJson(filePath, fallback) {
   }
 }
 
+async function readState(key, filePath, fallback) {
+  const dbValue = await loadAppState(key);
+  if (dbValue !== null) {
+    return dbValue;
+  }
+
+  return readJson(filePath, fallback);
+}
+
 async function writeJson(filePath, value) {
   await ensureDataDir();
   await writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
 }
 
+async function writeState(key, filePath, value) {
+  const savedToDb = await saveAppState(key, value);
+  if (!savedToDb) {
+    await writeJson(filePath, value);
+  }
+}
+
 export async function getGuildConfigs() {
-  return readJson(guildConfigPath, {});
+  return readState("guild-config", guildConfigPath, {});
 }
 
 export async function getGuildConfig(guildId) {
@@ -41,12 +58,12 @@ export async function getGuildConfig(guildId) {
 export async function saveGuildConfig(guildId, config) {
   const configs = await getGuildConfigs();
   configs[guildId] = config;
-  await writeJson(guildConfigPath, configs);
+  await writeState("guild-config", guildConfigPath, configs);
   return config;
 }
 
 export async function getReminderState() {
-  return readJson(reminderStatePath, {});
+  return readState("reminder-state", reminderStatePath, {});
 }
 
 export async function markReminderSent(guildId, gameKey) {
@@ -55,7 +72,7 @@ export async function markReminderSent(guildId, gameKey) {
     ...(state[guildId] || {}),
     [gameKey]: new Date().toISOString()
   };
-  await writeJson(reminderStatePath, state);
+  await writeState("reminder-state", reminderStatePath, state);
 }
 
 export async function wasReminderSent(guildId, gameKey) {
@@ -64,11 +81,11 @@ export async function wasReminderSent(guildId, gameKey) {
 }
 
 export async function getFantasyState() {
-  return readJson(fantasyStatePath, {});
+  return readState("fantasy-state", fantasyStatePath, {});
 }
 
 export async function saveFantasyState(nextState) {
-  await writeJson(fantasyStatePath, nextState);
+  await writeState("fantasy-state", fantasyStatePath, nextState);
   return nextState;
 }
 
@@ -80,10 +97,10 @@ export async function updateFantasyState(updater) {
 }
 
 export async function getMediaRegistry() {
-  return readJson(mediaRegistryPath, {});
+  return readState("media-registry", mediaRegistryPath, {});
 }
 
 export async function saveMediaRegistry(nextRegistry) {
-  await writeJson(mediaRegistryPath, nextRegistry);
+  await writeState("media-registry", mediaRegistryPath, nextRegistry);
   return nextRegistry;
 }

@@ -2,6 +2,7 @@ import { Client, Events, GatewayIntentBits } from "discord.js";
 import { ensureBootstrapGuildConfig } from "./bootstrapConfig.js";
 import { handleCommand } from "./commands.js";
 import { config } from "./config.js";
+import { initializeDatabase, isDatabaseConfigured } from "./database.js";
 import { startFantasyLoop } from "./fantasyService.js";
 import { startReminderLoop } from "./reminderService.js";
 
@@ -14,6 +15,10 @@ let fantasyInterval;
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  if (isDatabaseConfigured()) {
+    await initializeDatabase();
+    console.log("Database initialized.");
+  }
   const bootstrapConfig = await ensureBootstrapGuildConfig();
   if (bootstrapConfig?.channelId) {
     console.log(`Bootstrap config ready for channel ${bootstrapConfig.channelId}`);
