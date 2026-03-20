@@ -18,27 +18,33 @@ export async function generateText({
   systemPrompt,
   userPrompt,
   model = "gpt-5-mini",
-  temperature = 0.9
+  temperature = null
 }) {
+  const body = {
+    model,
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: systemPrompt }]
+      },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: userPrompt }]
+      }
+    ]
+  };
+
+  // GPT-5 models reject temperature, so only send it when explicitly set on other models.
+  if (temperature !== null && !model.startsWith("gpt-5")) {
+    body.temperature = temperature;
+  }
+
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: getHeaders({
       "Content-Type": "application/json"
     }),
-    body: JSON.stringify({
-      model,
-      temperature,
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: systemPrompt }]
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: userPrompt }]
-        }
-      ]
-    })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
