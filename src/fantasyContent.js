@@ -135,6 +135,26 @@ export async function buildTransactionsSummary(
       "Transactions:",
       recentTransactionsBlock(snapshot.transactions)
     ].filter(Boolean).join("\n\n")
+  }).then((text) => {
+    if (text.trim()) {
+      return text;
+    }
+
+    const recentItems = snapshot.transactions.slice(0, 3);
+    return [
+      "**Daily Transactions Report**",
+      `Filed for ${formatDateTime(new Date(), timezone)}`,
+      "",
+      ...(recentItems.length > 0
+        ? recentItems.map((transaction) => {
+            const players = transaction.players.map((player) => `${player.type} ${player.name}`).join(", ");
+            const bid = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
+            return `- ${transaction.teamName} made a ${transaction.type.toLowerCase()}${bid}: ${players}.`;
+          })
+        : ["- No new transaction activity was returned today."]),
+      "",
+      "Takeaway: the recap generator came back empty, so this is the fallback box score version."
+    ].join("\n");
   });
 }
 
