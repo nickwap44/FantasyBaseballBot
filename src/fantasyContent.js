@@ -350,6 +350,18 @@ export async function buildTransactionGrades(snapshot, timezone, registryText = 
       "Transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5))
     ].filter(Boolean).join("\n\n")
+  }).then((text) => {
+    if (text.trim()) {
+      return text;
+    }
+
+    return [
+      "**Instant Transaction Grades**",
+      `Filed for ${formatDateTime(new Date(), timezone)}`,
+      "",
+      "The media desk reviewed the latest move, but the write-up came back empty.",
+      "Consider this a provisional C+ until Rico starts yelling and Elena asks for more sample size."
+    ].join("\n");
   });
 }
 
