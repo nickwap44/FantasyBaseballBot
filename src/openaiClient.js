@@ -14,6 +14,33 @@ function getHeaders(extra = {}) {
   };
 }
 
+function extractTextFromOutputItems(output = []) {
+  const chunks = [];
+
+  for (const item of output) {
+    if (!item || !Array.isArray(item.content)) {
+      continue;
+    }
+
+    for (const contentItem of item.content) {
+      if (!contentItem) {
+        continue;
+      }
+
+      if (typeof contentItem.text === "string" && contentItem.text.trim()) {
+        chunks.push(contentItem.text.trim());
+        continue;
+      }
+
+      if (typeof contentItem.output_text === "string" && contentItem.output_text.trim()) {
+        chunks.push(contentItem.output_text.trim());
+      }
+    }
+  }
+
+  return chunks.join("\n").trim();
+}
+
 export async function generateText({
   systemPrompt,
   userPrompt,
@@ -53,7 +80,33 @@ export async function generateText({
   }
 
   const payload = await response.json();
-  return payload.output_text?.trim() || "";
+  const directText = payload.output_text?.trim() || "";
+  if (directText) {
+    return directText;
+  }
+
+  const fallbackText = extractTextFromOutputItems(payload.output);
+  if (fallbackText) {
+    return fallbackText;
+  }
+
+  console.warn("OpenAI text response was empty.", {
+    model,
+    outputTextPresent: typeof payload.output_text === "string",
+    outputItemCount: Array.isArray(payload.output) ? payload.output.length : 0,
+    responseShape: JSON.stringify(
+      {
+        id: payload.id,
+        status: payload.status,
+        output_text: payload.output_text,
+        output: payload.output
+      },
+      null,
+      2
+    ).slice(0, 4000)
+  });
+
+  return "";
 }
 
 export async function generateSpeech({
