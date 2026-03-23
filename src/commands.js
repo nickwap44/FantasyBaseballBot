@@ -19,7 +19,12 @@ function getDefaultGuildConfig() {
     powerRankingsChannelId: appConfig.powerRankingsChannelId,
     socialChannelId: appConfig.socialChannelId,
     podcastChannelId: appConfig.podcastChannelId,
-    podcastManualContext: ""
+    podcastManualContext: "",
+    podcastHostNames: {
+      lead: "Mason",
+      hotTake: "Rico",
+      analyst: "Elena"
+    }
   };
 }
 
@@ -127,6 +132,38 @@ export const commandDefinitions = [
       option
         .setName("text")
         .setDescription("Context to store for future podcast episodes.")
+        .setRequired(false)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("podcast-host")
+    .setDescription("Set or inspect the podcast host names.")
+    .addStringOption((option) =>
+      option
+        .setName("action")
+        .setDescription("What you want to do.")
+        .setRequired(true)
+        .addChoices(
+          { name: "set", value: "set" },
+          { name: "show", value: "show" },
+          { name: "reset", value: "reset" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("role")
+        .setDescription("Which host role you want to rename.")
+        .setRequired(false)
+        .addChoices(
+          { name: "lead", value: "lead" },
+          { name: "hotTake", value: "hotTake" },
+          { name: "analyst", value: "analyst" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("name")
+        .setDescription("The new host name.")
         .setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
@@ -301,7 +338,8 @@ export async function handleCommand(interaction) {
         `Power rankings channel: ${guildConfig.powerRankingsChannelId ? `<#${guildConfig.powerRankingsChannelId}>` : "not set"}`,
         `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,
         `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`,
-        `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`
+        `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
+        `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`
       ].join("\n"),
       ephemeral: true
     });
@@ -349,6 +387,62 @@ export async function handleCommand(interaction) {
       content: action === "replace"
         ? "Podcast manual context replaced."
         : "Podcast manual context appended.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "podcast-host") {
+    const action = interaction.options.getString("action", true);
+    const currentHostNames = {
+      lead: guildConfig.podcastHostNames?.lead || "Mason",
+      hotTake: guildConfig.podcastHostNames?.hotTake || "Rico",
+      analyst: guildConfig.podcastHostNames?.analyst || "Elena"
+    };
+
+    if (action === "show") {
+      await interaction.reply({
+        content: [
+          `Lead host: ${currentHostNames.lead}`,
+          `Hot take host: ${currentHostNames.hotTake}`,
+          `Analyst host: ${currentHostNames.analyst}`
+        ].join("\n"),
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (action === "reset") {
+      guildConfig.podcastHostNames = {
+        lead: "Mason",
+        hotTake: "Rico",
+        analyst: "Elena"
+      };
+      await saveGuildConfig(guildId, guildConfig);
+      await interaction.reply({
+        content: "Podcast host names reset to Mason, Rico, and Elena.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const role = interaction.options.getString("role");
+    const name = interaction.options.getString("name")?.trim();
+    if (!role || !name) {
+      await interaction.reply({
+        content: "Please include both `role` and `name` when using `set`.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    guildConfig.podcastHostNames = {
+      ...currentHostNames,
+      [role]: name.slice(0, 40)
+    };
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: `${role} host is now named ${guildConfig.podcastHostNames[role]}.`,
       ephemeral: true
     });
     return;

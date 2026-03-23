@@ -70,6 +70,42 @@ const PODCAST_SEGMENTS = [
   "Bullpen Close"
 ];
 
+function getDefaultHostNames() {
+  return {
+    lead: "Mason",
+    hotTake: "Rico",
+    analyst: "Elena"
+  };
+}
+
+function resolveHostNames(hostNames = {}) {
+  const defaults = getDefaultHostNames();
+  return {
+    lead: hostNames.lead || defaults.lead,
+    hotTake: hostNames.hotTake || defaults.hotTake,
+    analyst: hostNames.analyst || defaults.analyst
+  };
+}
+
+function getHostRoleFromSpeaker(speaker, hostNames = {}) {
+  const normalized = speaker.toLowerCase();
+  const resolved = resolveHostNames(hostNames);
+
+  if (normalized === resolved.lead.toLowerCase() || normalized.includes("mason")) {
+    return "lead";
+  }
+
+  if (normalized === resolved.hotTake.toLowerCase() || normalized.includes("rico")) {
+    return "hotTake";
+  }
+
+  if (normalized === resolved.analyst.toLowerCase() || normalized.includes("elena")) {
+    return "analyst";
+  }
+
+  return "lead";
+}
+
 export async function buildTransactionsSummary(snapshot, timezone) {
   return generateText({
     systemPrompt:
@@ -162,12 +198,13 @@ export function buildDemoSocialPost(snapshot, timezone) {
   ].join("\n");
 }
 
-function buildPodcastPrompt(snapshot, historyText, timezone) {
+function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
+  const resolvedHostNames = resolveHostNames(hostNames);
   return [
     "Write a fantasy baseball podcast transcript for three hosts.",
-    "Host 1: Mason, the straight man and lead host. He runs the show and introduces segments.",
-    "Host 2: Rico, the hot take artist who overreacts and flies off the handle.",
-    "Host 3: Elena, the steady analyst who grounds everything in evidence.",
+    `Host 1: ${resolvedHostNames.lead}, the straight man and lead host. He runs the show and introduces segments.`,
+    `Host 2: ${resolvedHostNames.hotTake}, the hot take artist who overreacts and flies off the handle.`,
+    `Host 3: ${resolvedHostNames.analyst}, the steady analyst who grounds everything in evidence.`,
     "Keep the total transcript in the 5-10 minute range, roughly 700-1200 words.",
     "Include a cold open, one standings segment, one matchup/results segment, one transactions/news segment, and one closing prediction segment.",
     "The hosts should sound like long-time friends and recurring co-hosts who know each other's rhythms.",
@@ -175,7 +212,7 @@ function buildPodcastPrompt(snapshot, historyText, timezone) {
     "Use the memory block as canon for inside jokes, unresolved debates, and recurring bits.",
     "Include at least two playful callbacks or inside-joke moments when the memory block gives you something to use.",
     `Use these recurring show segments when they fit: ${PODCAST_SEGMENTS.join(", ")}.`,
-    "Mason should actively introduce segment names like a real recurring show.",
+    `${resolvedHostNames.lead} should actively introduce segment names like a real recurring show.`,
     "Make every line start with the speaker name followed by a colon.",
     "Write for spoken audio, not for reading.",
     "Use short, natural sentences and contractions.",
@@ -199,7 +236,8 @@ function buildPodcastPrompt(snapshot, historyText, timezone) {
   ].join("\n");
 }
 
-function parseTranscriptLines(transcript) {
+function parseTranscriptLines(transcript, hostNames = {}) {
+  const resolvedHostNames = resolveHostNames(hostNames);
   return transcript
     .split("\n")
     .map((line) => line.trim())
@@ -207,7 +245,7 @@ function parseTranscriptLines(transcript) {
     .map((line) => {
       const separator = line.indexOf(":");
       if (separator === -1) {
-        return { speaker: "Mason", text: line };
+        return { speaker: resolvedHostNames.lead, text: line };
       }
 
       return {
@@ -218,35 +256,23 @@ function parseTranscriptLines(transcript) {
     .filter((line) => line.text);
 }
 
-export function getVoiceForSpeaker(speaker, renderer = "tts") {
-  const normalized = speaker.toLowerCase();
-  if (renderer === "realtime") {
-    if (normalized.includes("mason")) {
-      return "cedar";
-    }
-
-    if (normalized.includes("rico")) {
-      return "ash";
-    }
-
-    return "marin";
-  }
-
-  if (normalized.includes("mason")) {
+export function getVoiceForSpeaker(speaker, renderer = "tts", hostNames = {}) {
+  const role = getHostRoleFromSpeaker(speaker, hostNames);
+  if (role === "lead") {
     return "cedar";
   }
 
-  if (normalized.includes("rico")) {
+  if (role === "hotTake") {
     return "ash";
   }
 
   return "marin";
 }
 
-export function getVoiceInstructionsForSpeaker(speaker) {
-  const normalized = speaker.toLowerCase();
+export function getVoiceInstructionsForSpeaker(speaker, hostNames = {}) {
+  const role = getHostRoleFromSpeaker(speaker, hostNames);
 
-  if (normalized.includes("rico")) {
+  if (role === "hotTake") {
     return [
       "Sound energetic, impulsive, and a little unhinged in a fun sports-radio way.",
       "Punch key words, vary pacing, and lean into hot-take confidence.",
@@ -255,7 +281,7 @@ export function getVoiceInstructionsForSpeaker(speaker) {
     ].join(" ");
   }
 
-  if (normalized.includes("elena")) {
+  if (role === "analyst") {
     return [
       "Sound calm, grounded, and analytically sharp with a warm, natural cadence.",
       "Use a measured delivery, but let dry humor and knowing amusement slip through sometimes.",
@@ -270,23 +296,23 @@ export function getVoiceInstructionsForSpeaker(speaker) {
   ].join(" ");
 }
 
-function buildNarratedTranscript(transcript) {
-  return parseTranscriptLines(transcript)
+function buildNarratedTranscript(transcript, hostNames = {}) {
+  return parseTranscriptLines(transcript, hostNames)
     .slice(0, 80)
     .filter((line) => line.text);
 }
 
-async function buildTtsPodcastAudio(transcript) {
-  const lines = buildNarratedTranscript(transcript);
+async function buildTtsPodcastAudio(transcript, hostNames = {}) {
+  const lines = buildNarratedTranscript(transcript, hostNames);
   const segments = [];
 
   for (const line of lines) {
     segments.push(
       await generateSpeech({
         text: line.text,
-        voice: getVoiceForSpeaker(line.speaker, "tts"),
+        voice: getVoiceForSpeaker(line.speaker, "tts", hostNames),
         format: "mp3",
-        instructions: getVoiceInstructionsForSpeaker(line.speaker)
+        instructions: getVoiceInstructionsForSpeaker(line.speaker, hostNames)
       })
     );
   }
@@ -294,35 +320,40 @@ async function buildTtsPodcastAudio(transcript) {
   return stitchMp3Segments(segments);
 }
 
-async function buildPodcastAudio(transcript, renderer) {
-  const lines = buildNarratedTranscript(transcript);
+async function buildPodcastAudio(transcript, renderer, hostNames = {}) {
+  const lines = buildNarratedTranscript(transcript, hostNames);
   if (renderer === "realtime") {
-    return buildRealtimePodcastAudio(lines, (speaker) => getVoiceForSpeaker(speaker, "realtime"), getVoiceInstructionsForSpeaker);
+    return buildRealtimePodcastAudio(
+      lines,
+      (speaker) => getVoiceForSpeaker(speaker, "realtime", hostNames),
+      (speaker) => getVoiceInstructionsForSpeaker(speaker, hostNames)
+    );
   }
 
-  return buildTtsPodcastAudio(transcript);
+  return buildTtsPodcastAudio(transcript, hostNames);
 }
 
-async function buildPodcastPackageAudio(transcript, renderer) {
+async function buildPodcastPackageAudio(transcript, renderer, hostNames = {}) {
+  const resolvedHostNames = resolveHostNames(hostNames);
   const introMusic = await generateMusicCue("intro");
   const introTitle = await generateSpeech({
     text: `${PODCAST_TITLE}. ${PODCAST_SUBTITLE}.`,
-    voice: getVoiceForSpeaker("Mason", renderer),
+    voice: getVoiceForSpeaker(resolvedHostNames.lead, renderer, resolvedHostNames),
     format: "mp3",
     instructions:
       "Deliver this like a polished podcast show title. Warm, upbeat, and confident."
   });
   const bumper = await generateSpeech({
-    text: "Now, here's Mason, Rico, and Elena.",
-    voice: getVoiceForSpeaker("Mason", renderer),
+    text: `Now, here's ${resolvedHostNames.lead}, ${resolvedHostNames.hotTake}, and ${resolvedHostNames.analyst}.`,
+    voice: getVoiceForSpeaker(resolvedHostNames.lead, renderer, resolvedHostNames),
     format: "mp3",
     instructions:
       "Read this like a short show bumper leading into the hosts. Crisp and energetic."
   });
-  const body = await buildPodcastAudio(transcript, renderer);
+  const body = await buildPodcastAudio(transcript, renderer, resolvedHostNames);
   const outroBumper = await generateSpeech({
     text: `You've been listening to ${PODCAST_TITLE}. Thanks for tuning in to the Backyard Baseball Association.`,
-    voice: getVoiceForSpeaker("Mason", renderer),
+    voice: getVoiceForSpeaker(resolvedHostNames.lead, renderer, resolvedHostNames),
     format: "mp3",
     instructions:
       "Read this like a clean podcast sign-off. Friendly, smooth, and conclusive."
@@ -396,15 +427,22 @@ export async function buildRegistryUpdate(snapshot, existingRegistryText = "") {
   });
 }
 
-export async function buildPodcastPackage(snapshot, podcastHistory, timezone, renderer = config.podcastRenderer) {
+export async function buildPodcastPackage(
+  snapshot,
+  podcastHistory,
+  timezone,
+  renderer = config.podcastRenderer,
+  hostNames = {}
+) {
+  const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
       "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter.",
-    userPrompt: buildPodcastPrompt(snapshot, podcastHistory, timezone),
+    userPrompt: buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
     temperature: 1
   });
 
-  const mp3Buffer = await buildPodcastPackageAudio(transcript, renderer);
+  const mp3Buffer = await buildPodcastPackageAudio(transcript, renderer, resolvedHostNames);
   const transcriptBuffer = Buffer.from(transcript, "utf8");
   const summary = await generateText({
     systemPrompt:
@@ -430,41 +468,43 @@ export async function buildDemoPodcastPackage(
   snapshot,
   timezone,
   renderer = config.podcastRenderer,
-  manualContext = ""
+  manualContext = "",
+  hostNames = {}
 ) {
+  const resolvedHostNames = resolveHostNames(hostNames);
   const manualContextLine = manualContext.trim()
-    ? `Mason: Before we get rolling, producer's note for the room: ${manualContext.trim().slice(0, 280)}`
+    ? `${resolvedHostNames.lead}: Before we get rolling, producer's note for the room: ${manualContext.trim().slice(0, 280)}`
     : null;
   const transcript = [
     ...(manualContextLine ? [manualContextLine] : []),
-    "Mason: Welcome to The Backyard Bullpen. We are back, the Backyard Baseball Association is already noisy, and Rico has somehow reopened the panic meter before breakfast.",
-    "Rico: Because the panic meter is a public service, Mason. I am here for the people.",
-    "Elena: You are here for the overreaction. The people are just caught in the blast radius.",
-    "Mason: That's fair. Also, Elena laughed at that, which means we should mark the tape. Historic moment for the show.",
-    "Rico: She laughs every time I tell the truth. She just does it like she's grading a paper.",
-    "Elena: I laugh when you're accidentally insightful. It keeps the show fresh.",
-    `Mason: On the field, ${snapshot.teams[0].name} still looks like the team everyone is chasing, but ${snapshot.teams[1].name} is making this a real conversation.`,
-    "Rico: Real conversation? That's a title fight. That's two teams in the middle of the ring and one of them is carrying a folding chair.",
-    "Elena: And this is why I have to translate for the audience. What Rico means is the top-end talent is real, but roster balance may decide it.",
-    "Mason: Meanwhile, Waiver Wire Wizards spent seventeen dollars on Jackson Holliday, which means Rico has now started his annual April coronation segment.",
-    "Rico: Annual? Timeless. Some people see a waiver claim. I see destiny with middle infield eligibility.",
-    "Elena: Last week your destiny speech ended with you declaring the panic meter broken and then panicking for half an hour.",
-    `Mason: Also, ${snapshot.matchups[0].homeTeam} is flattening ${snapshot.matchups[0].awayTeam} this week, and I can already hear the disrespectful-before-breakfast trade offers being drafted as we speak.`,
-    "Rico: Good. Send them. Let chaos breathe.",
-    "Elena: And then act shocked when the group chat remembers who sent them. That's another beautiful league tradition.",
-    "Mason: That's the show. Rico is still crowning teams in April, Elena is still delivering drive-by reality checks, and the panic meter remains legally questionable. We'll catch you next time on The Backyard Bullpen."
+    `${resolvedHostNames.lead}: Welcome to The Backyard Bullpen. We are back, the Backyard Baseball Association is already noisy, and ${resolvedHostNames.hotTake} has somehow reopened the panic meter before breakfast.`,
+    `${resolvedHostNames.hotTake}: Because the panic meter is a public service, ${resolvedHostNames.lead}. I am here for the people.`,
+    `${resolvedHostNames.analyst}: You are here for the overreaction. The people are just caught in the blast radius.`,
+    `${resolvedHostNames.lead}: That's fair. Also, ${resolvedHostNames.analyst} laughed at that, which means we should mark the tape. Historic moment for the show.`,
+    `${resolvedHostNames.hotTake}: ${resolvedHostNames.analyst} laughs every time I tell the truth. She just does it like she's grading a paper.`,
+    `${resolvedHostNames.analyst}: I laugh when you're accidentally insightful. It keeps the show fresh.`,
+    `${resolvedHostNames.lead}: On the field, ${snapshot.teams[0].name} still looks like the team everyone is chasing, but ${snapshot.teams[1].name} is making this a real conversation.`,
+    `${resolvedHostNames.hotTake}: Real conversation? That's a title fight. That's two teams in the middle of the ring and one of them is carrying a folding chair.`,
+    `${resolvedHostNames.analyst}: And this is why I have to translate for the audience. What ${resolvedHostNames.hotTake} means is the top-end talent is real, but roster balance may decide it.`,
+    `${resolvedHostNames.lead}: Meanwhile, Waiver Wire Wizards spent seventeen dollars on Jackson Holliday, which means ${resolvedHostNames.hotTake} has now started the annual April coronation segment.`,
+    `${resolvedHostNames.hotTake}: Annual? Timeless. Some people see a waiver claim. I see destiny with middle infield eligibility.`,
+    `${resolvedHostNames.analyst}: Last week your destiny speech ended with you declaring the panic meter broken and then panicking for half an hour.`,
+    `${resolvedHostNames.lead}: Also, ${snapshot.matchups[0].homeTeam} is flattening ${snapshot.matchups[0].awayTeam} this week, and I can already hear the disrespectful-before-breakfast trade offers being drafted as we speak.`,
+    `${resolvedHostNames.hotTake}: Good. Send them. Let chaos breathe.`,
+    `${resolvedHostNames.analyst}: And then act shocked when the group chat remembers who sent them. That's another beautiful league tradition.`,
+    `${resolvedHostNames.lead}: That's the show. ${resolvedHostNames.hotTake} is still crowning teams in April, ${resolvedHostNames.analyst} is still delivering drive-by reality checks, and the panic meter remains legally questionable. We'll catch you next time on The Backyard Bullpen.`
   ].join("\n");
 
   const summary = [
-    "- Mason framed the episode as a proper Backyard Bullpen show open and steered the room through the familiar chaos.",
+    `- ${resolvedHostNames.lead} framed the episode as a proper Backyard Bullpen show open and steered the room through the familiar chaos.`,
     ...(manualContextLine ? ["- The hosts acknowledged the latest producer note and folded it into the show setup."] : []),
-    "- Rico revived the April coronation bit around the Jackson Holliday add and fully embraced the panic meter nonsense again.",
-    `- Elena played cleanup with dry humor and gave a more grounded read on ${snapshot.teams[1].name} as a real threat.`,
-    "- The panic meter, disrespectful-before-breakfast trade offers, and Elena's rare laughter all came back as running bits."
+    `- ${resolvedHostNames.hotTake} revived the April coronation bit around the Jackson Holliday add and fully embraced the panic meter nonsense again.`,
+    `- ${resolvedHostNames.analyst} played cleanup with dry humor and gave a more grounded read on ${snapshot.teams[1].name} as a real threat.`,
+    `- The panic meter, disrespectful-before-breakfast trade offers, and ${resolvedHostNames.analyst}'s rare laughter all came back as running bits.`
   ].join("\n");
   const memory = [
-    "Running jokes: Rico's annual April coronation, the panic meter, disrespectful-before-breakfast trade offers, and Mason noting every time Elena visibly enjoys the chaos.",
-    "Host chemistry: Mason plays ringmaster, Rico detonates takes on purpose, and Elena dryly punctures both of them before reluctantly laughing.",
+    `Running jokes: ${resolvedHostNames.hotTake}'s annual April coronation, the panic meter, disrespectful-before-breakfast trade offers, and ${resolvedHostNames.lead} noting every time ${resolvedHostNames.analyst} visibly enjoys the chaos.`,
+    `Host chemistry: ${resolvedHostNames.lead} plays ringmaster, ${resolvedHostNames.hotTake} detonates takes on purpose, and ${resolvedHostNames.analyst} dryly punctures both of them before reluctantly laughing.`,
     `League storylines: ${snapshot.teams[0].name} still sets the pace, while ${snapshot.teams[1].name} keeps drawing contender talk because of roster balance and steady pressure.${manualContext.trim() ? ` Manual context in play: ${manualContext.trim().slice(0, 180)}` : ""}`
   ].join("\n");
 
@@ -472,7 +512,7 @@ export async function buildDemoPodcastPackage(
     transcript,
     summary: `**${PODCAST_TITLE}**\n${PODCAST_SUBTITLE}\n\n${summary}`,
     memory,
-    audioAttachment: new AttachmentBuilder(await buildPodcastPackageAudio(transcript, renderer), {
+    audioAttachment: new AttachmentBuilder(await buildPodcastPackageAudio(transcript, renderer, resolvedHostNames), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
     }),
     transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {

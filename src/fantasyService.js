@@ -205,6 +205,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   }
 
   if (feature === "podcast") {
+    const hostNames = guildConfig.podcastHostNames || {};
     const previousMemory = [
       state.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
       formatRegistryForPrompt(registry),
@@ -220,7 +221,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       snapshot,
       previousMemory,
       guildConfig.timezone,
-      renderer
+      renderer,
+      hostNames
     );
     await channel.send({
       content: [
@@ -416,6 +418,7 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "podcast") {
+    const hostNames = guildConfig?.podcastHostNames || {};
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -428,7 +431,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           snapshot,
           timezone,
           renderer,
-          guildConfig?.podcastManualContext || ""
+          guildConfig?.podcastManualContext || "",
+          hostNames
         )
       : await buildPodcastPackage(
           snapshot,
@@ -436,7 +440,8 @@ export async function handleFantasyTest(testType, guildId, client) {
             ? `Producer notes and manual context:\n${guildConfig.podcastManualContext}`
             : "",
           timezone,
-          renderer
+          renderer,
+          hostNames
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {

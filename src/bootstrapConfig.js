@@ -17,7 +17,12 @@ export async function ensureBootstrapGuildConfig() {
       existing?.powerRankingsChannelId || appConfig.powerRankingsChannelId,
     socialChannelId: existing?.socialChannelId || appConfig.socialChannelId,
     podcastChannelId: existing?.podcastChannelId || appConfig.podcastChannelId,
-    podcastManualContext: existing?.podcastManualContext || ""
+    podcastManualContext: existing?.podcastManualContext || "",
+    podcastHostNames: {
+      lead: existing?.podcastHostNames?.lead || "Mason",
+      hotTake: existing?.podcastHostNames?.hotTake || "Rico",
+      analyst: existing?.podcastHostNames?.analyst || "Elena"
+    }
   };
 
   if (!nextConfig.channelId) {
@@ -35,7 +40,10 @@ export async function ensureBootstrapGuildConfig() {
     existing.powerRankingsChannelId !== nextConfig.powerRankingsChannelId ||
     existing.socialChannelId !== nextConfig.socialChannelId ||
     existing.podcastChannelId !== nextConfig.podcastChannelId ||
-    existing.podcastManualContext !== nextConfig.podcastManualContext;
+    existing.podcastManualContext !== nextConfig.podcastManualContext ||
+    existing.podcastHostNames?.lead !== nextConfig.podcastHostNames.lead ||
+    existing.podcastHostNames?.hotTake !== nextConfig.podcastHostNames.hotTake ||
+    existing.podcastHostNames?.analyst !== nextConfig.podcastHostNames.analyst;
 
   if (changed) {
     await saveGuildConfig(guildId, nextConfig);
