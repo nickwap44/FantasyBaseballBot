@@ -1,9 +1,11 @@
 import {
+  getMailbagState,
   getGuildConfig,
   getGuildConfigs,
   getFantasyState,
   getMediaRegistry,
   getReporterState,
+  saveMailbagState,
   saveFantasyState,
   saveMediaRegistry,
   saveReporterState
@@ -22,6 +24,7 @@ import {
   buildSocialPost,
   buildTransactionGrades,
   buildTransactionsSummary,
+  formatMailbagQuestions,
   formatReporterContext
 } from "./fantasyContent.js";
 import { config } from "./config.js";
@@ -173,6 +176,13 @@ async function getRecentSocialDiscussion(client, guildConfig, { limit = 25, hour
     .slice(-15);
 
   return lines.join("\n");
+}
+
+function getOpenMailbagQuestions(mailbagState, guildId, limit = 4) {
+  return getMailbagStateForGuild(mailbagState, guildId)
+    .questions
+    .filter((question) => question.status === "open")
+    .slice(0, limit);
 }
 
 function getRelevantTeamIds(snapshot, feature) {
@@ -427,6 +437,13 @@ function getReporterStateForGuild(reporterState, guildId) {
     nextInquiryId: 1,
     inquiries: [],
     triggerKeys: {}
+  };
+}
+
+function getMailbagStateForGuild(mailbagState, guildId) {
+  return mailbagState[guildId] || {
+    nextQuestionId: 1,
+    questions: []
   };
 }
 
@@ -746,7 +763,7 @@ async function maybeRefreshMediaRegistry(snapshot, timezone, now, state, registr
   };
 }
 
-async function sendFeatureMessage(client, guildId, guildConfig, feature, snapshot, state, registry) {
+async function sendFeatureMessage(client, guildId, guildConfig, feature, snapshot, state, registry, mailbagState) {
   const channelId = getFeatureChannelId(guildConfig, feature);
   if (!channelId) {
     return state;
@@ -821,6 +838,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       limit: 40,
       hours: 168
     });
+    const mailbagQuestions = getOpenMailbagQuestions(mailbagState, guildId, 4);
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
         ? "realtime"
@@ -833,7 +851,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       hostNames,
       linkedManagersContext,
       reporterContextText,
-      socialDiscussionText
+      socialDiscussionText,
+      formatMailbagQuestions(mailbagQuestions)
     );
     await channel.send({
       content: [
@@ -855,6 +874,18 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       transcript: podcast.transcript
     });
 
+    if (mailbagQuestions.length > 0) {
+      const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
+      mailbagState[guildId] = {
+        ...guildMailbagState,
+        questions: guildMailbagState.questions.map((question) =>
+          mailbagQuestions.some((entry) => entry.id === question.id)
+            ? { ...question, status: "used", usedAt: new Date().toISOString() }
+            : question
+        )
+      };
+    }
+
     return {
       ...state,
       podcastHistory: [...(state.podcastHistory || []), podcast.summary].slice(-6),
@@ -872,6 +903,7 @@ export async function runFantasyJobs(client, logger = console) {
   const fantasyState = await getFantasyState();
   const mediaRegistry = await getMediaRegistry();
   const reporterState = await getReporterState();
+  const mailbagState = await getMailbagState();
   const nextState = { ...fantasyState };
   const nextRegistry = { ...mediaRegistry };
 
@@ -925,7 +957,8 @@ export async function runFantasyJobs(client, logger = console) {
           feature,
           snapshot,
           nextState[guildId],
-          nextRegistry[guildId]
+          nextRegistry[guildId],
+          mailbagState
         );
         nextState[guildId] = {
           ...updatedState,
@@ -940,6 +973,7 @@ export async function runFantasyJobs(client, logger = console) {
   await saveFantasyState(nextState);
   await saveMediaRegistry(nextRegistry);
   await saveReporterState(reporterState);
+  await saveMailbagState(mailbagState);
 }
 
 export function startFantasyLoop(client, intervalMs) {
@@ -1205,10 +1239,12 @@ export async function handleFantasyTest(testType, guildId, client) {
     const reporterContextText = formatReporterContext(
       getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
     );
+    const mailbagState = await getMailbagState();
     const socialDiscussionText = await getRecentSocialDiscussion(client, guildConfig || {}, {
       limit: 40,
       hours: 168
     });
+    const mailbagQuestions = getOpenMailbagQuestions(mailbagState, guildId, 4);
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -1234,7 +1270,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           hostNames,
           linkedManagersContext,
           reporterContextText,
-          socialDiscussionText
+          socialDiscussionText,
+          formatMailbagQuestions(mailbagQuestions)
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {

@@ -130,6 +130,65 @@ function formatManagerTag(row) {
   return row.team.manager || "Unknown manager";
 }
 
+function getStandingsRankMap(snapshot) {
+  return new Map(
+    [...snapshot.teams]
+      .sort((left, right) => {
+        if (right.wins !== left.wins) {
+          return right.wins - left.wins;
+        }
+
+        return right.pointsFor - left.pointsFor;
+      })
+      .map((team, index) => [team.id, index + 1])
+  );
+}
+
+function buildWeeklyAwards(rankedRows, snapshot) {
+  const standingsRanks = getStandingsRankMap(snapshot);
+  const teamOfTheWeek = rankedRows[0];
+  const closestMatchup = [...snapshot.matchups]
+    .sort(
+      (left, right) =>
+        Math.abs((left.homeScore || 0) - (left.awayScore || 0)) -
+        Math.abs((right.homeScore || 0) - (right.awayScore || 0))
+    )[0];
+  const toughestScene = [...snapshot.matchups]
+    .sort(
+      (left, right) =>
+        Math.abs((right.homeScore || 0) - (right.awayScore || 0)) -
+        Math.abs((left.homeScore || 0) - (left.awayScore || 0))
+    )[0];
+  const fraudWatch = rankedRows
+    .map((row, index) => ({
+      ...row,
+      powerRank: index + 1,
+      standingsRank: standingsRanks.get(row.team.id) || index + 1
+    }))
+    .filter((row) => row.standingsRank + 1 < row.powerRank || (row.standingsRank <= 3 && row.pointsForScore < 45))
+    .sort(
+      (left, right) =>
+        (right.powerRank - right.standingsRank) - (left.powerRank - left.standingsRank)
+    )[0];
+
+  return {
+    teamOfTheWeek,
+    closestMatchup,
+    toughestScene,
+    fraudWatch
+  };
+}
+
+export function formatMailbagQuestions(mailbagQuestions = []) {
+  if (!mailbagQuestions.length) {
+    return "";
+  }
+
+  return mailbagQuestions
+    .map((question) => `- ${question.askedByDisplayName}: ${question.question}`)
+    .join("\n");
+}
+
 function matchupBlock(matchups) {
   return matchups
     .map(
@@ -154,12 +213,19 @@ const PODCAST_TITLE = "The Backyard Bullpen";
 const PODCAST_SUBTITLE = "The official podcast of the Backyard Baseball Association";
 const LEAGUE_INSIDER_HANDLE = "@BBAInsider";
 const LEAGUE_INSIDER_NAME = "Backyard Sources";
+const LEAGUE_INSIDER_TRAITS = [
+  "acts like every league group chat leak lands on his desk first",
+  "never trusts an early front-runner who starts peacocking before the games count",
+  "keeps receipts on FAAB overpays, preseason chest-thumping, and suspicious victory laps",
+  "enjoys quietly escalating league tension and pretending it is responsible journalism"
+];
 const PODCAST_SEGMENTS = [
   "Lead-off Check-In",
   "Panic Meter",
   "The April Coronation Watch",
   "Waiver Wire Crimes",
   "Disrespectful Trade Offer of the Week",
+  "Mailbag",
   "Bullpen Close"
 ];
 
@@ -263,6 +329,7 @@ export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
   }
 
   const ranked = getPowerRankingRows(snapshot, espnDiscordLinks);
+  const awards = buildWeeklyAwards(ranked, snapshot);
 
   return [
     `**BBA Power Rankings**`,
@@ -276,8 +343,17 @@ export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
       return `${index + 1}. ${team.name} - ${formatManagerTag(row)} | Score ${row.powerScore.toFixed(1)} | Record ${record} | PF ${team.pointsFor.toFixed(1)} | Diff ${diffPrefix}${row.pointDiff.toFixed(1)}`;
     }),
     "",
-    `Top roster on the numbers: ${ranked[0].team.name}`,
-    `Biggest climb path: ${ranked[ranked.length - 1].team.name} can move fast with one strong scoring week.`
+    "**Weekly Awards**",
+    `Team of the Week: ${awards.teamOfTheWeek.team.name} - ${formatManagerTag(awards.teamOfTheWeek)}`,
+    awards.closestMatchup
+      ? `Closest matchup: ${awards.closestMatchup.awayTeam} at ${awards.closestMatchup.homeTeam}`
+      : "Closest matchup: No matchup data yet.",
+    awards.toughestScene
+      ? `Tough Scene of the Week: ${awards.toughestScene.awayScore > awards.toughestScene.homeScore ? awards.toughestScene.homeTeam : awards.toughestScene.awayTeam}`
+      : "Tough Scene of the Week: Nobody has taken a public L yet.",
+    awards.fraudWatch
+      ? `Fraud Watch: ${awards.fraudWatch.team.name} - the standing says contender, the power score says slow down.`
+      : "Fraud Watch: No formal fraud alert this week."
   ].join("\n");
 }
 
@@ -292,12 +368,29 @@ export async function buildSocialPost(
   reporterContextText = ""
 ) {
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
+  const biggestBid = [...snapshot.transactions]
+    .filter((transaction) => Number.isFinite(transaction.biddingAmount) && transaction.biddingAmount > 0)
+    .sort((left, right) => (right.biddingAmount || 0) - (left.biddingAmount || 0))[0];
+  const topTeam = [...snapshot.teams]
+    .sort((left, right) => {
+      if (right.wins !== left.wins) {
+        return right.wins - left.wins;
+      }
+
+      return right.pointsFor - left.pointsFor;
+    })[0];
+  const insiderGrudges = [
+    ...LEAGUE_INSIDER_TRAITS.map((trait) => `- ${trait}`),
+    biggestBid ? `- still side-eyeing ${biggestBid.teamName} for spending $${biggestBid.biddingAmount} like the rest of the league forgot how budgets work` : "",
+    topTeam ? `- increasingly skeptical of ${topTeam.name} acting like the trophy is already on the mantle` : ""
+  ].filter(Boolean).join("\n");
   return generateText({
     systemPrompt:
-      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. Do not include hashtags unless they genuinely add something.`,
+      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. Do not include hashtags unless they genuinely add something.`,
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       seasonPreviewMode ? "League phase: preseason / early season before meaningful game action." : "",
+      `Insider personality and grudges:\n${insiderGrudges}`,
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
       "Recent transactions:",
@@ -353,6 +446,7 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     "Use the memory block as canon for inside jokes, unresolved debates, and recurring bits.",
     "Include at least two playful callbacks or inside-joke moments when the memory block gives you something to use.",
     `Use these recurring show segments when they fit: ${PODCAST_SEGMENTS.join(", ")}.`,
+    "If mailbag questions are provided, include a short Mailbag segment with 1-2 questions and let the hosts react to them naturally.",
     `${resolvedHostNames.lead} should actively introduce segment names like a real recurring show.`,
     "Make every line start with the speaker name followed by a colon.",
     "Write for spoken audio, not for reading.",
@@ -744,7 +838,8 @@ export async function buildPodcastPackage(
   hostNames = {},
   linkedManagersContext = "",
   reporterContextText = "",
-  socialDiscussionText = ""
+  socialDiscussionText = "",
+  mailbagText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
@@ -754,7 +849,8 @@ export async function buildPodcastPackage(
       buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
-      socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : ""
+      socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : "",
+      mailbagText ? `Mailbag questions:\n${mailbagText}` : ""
     ].filter(Boolean).join("\n\n"),
     temperature: 1
   });

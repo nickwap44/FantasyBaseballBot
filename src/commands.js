@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import { config as appConfig } from "./config.js";
 import { getDatabaseHealth } from "./database.js";
-import { getGuildConfig, getReporterState, saveGuildConfig, saveReporterState } from "./storage.js";
+import { getGuildConfig, getMailbagState, getReporterState, saveGuildConfig, saveMailbagState, saveReporterState } from "./storage.js";
 import { getLeagueSnapshot } from "./espnApi.js";
 import { handleFantasyTest } from "./fantasyService.js";
 
@@ -257,6 +257,33 @@ export const commandDefinitions = [
     .setName("reporter-status")
     .setDescription("Show recent reporter inquiries and responses."),
   new SlashCommandBuilder()
+    .setName("mailbag-submit")
+    .setDescription("Submit a question or take for the next fantasy podcast mailbag.")
+    .addStringOption((option) =>
+      option
+        .setName("question")
+        .setDescription("Your mailbag question or take.")
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("mailbag-status")
+    .setDescription("Show recent podcast mailbag questions.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("mailbag-clear")
+    .setDescription("Clear used or all podcast mailbag questions.")
+    .addStringOption((option) =>
+      option
+        .setName("scope")
+        .setDescription("Which questions to clear.")
+        .setRequired(true)
+        .addChoices(
+          { name: "used", value: "used" },
+          { name: "all", value: "all" }
+        )
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
     .setName("fantasy-test")
     .setDescription("Run a live test against ESPN or generate a sample content post.")
     .addStringOption((option) =>
@@ -329,6 +356,13 @@ function getReporterStateForGuild(reporterState, guildId) {
     nextInquiryId: 1,
     inquiries: [],
     triggerKeys: {}
+  };
+}
+
+function getMailbagStateForGuild(mailbagState, guildId) {
+  return mailbagState[guildId] || {
+    nextQuestionId: 1,
+    questions: []
   };
 }
 
@@ -493,6 +527,8 @@ export async function handleCommand(interaction) {
     let databaseLine = "Database: not configured";
     const reporterState = await getReporterState();
     const guildReporterState = getReporterStateForGuild(reporterState, guildId);
+    const mailbagState = await getMailbagState();
+    const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
 
     try {
       const dbHealth = await getDatabaseHealth();
@@ -519,7 +555,8 @@ export async function handleCommand(interaction) {
         `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
         `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
         `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`,
-        `Reporter inquiries: ${guildReporterState.inquiries.length}`
+        `Reporter inquiries: ${guildReporterState.inquiries.length}`,
+        `Mailbag questions: ${guildMailbagState.questions.filter((question) => question.status === "open").length} open`
       ].join("\n"),
       ephemeral: true
     });
@@ -848,6 +885,68 @@ export async function handleCommand(interaction) {
 
     await interaction.reply({
       content: lines.length > 0 ? lines.join("\n\n") : "No reporter inquiries yet.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "mailbag-submit") {
+    const question = interaction.options.getString("question", true).trim();
+    const mailbagState = await getMailbagState();
+    const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
+    const entry = {
+      id: guildMailbagState.nextQuestionId,
+      question: question.slice(0, 500),
+      askedByUserId: interaction.user.id,
+      askedByDisplayName:
+        interaction.member?.displayName ||
+        interaction.user.globalName ||
+        interaction.user.username,
+      askedAt: new Date().toISOString(),
+      status: "open",
+      usedAt: null
+    };
+
+    mailbagState[guildId] = {
+      nextQuestionId: guildMailbagState.nextQuestionId + 1,
+      questions: [entry, ...guildMailbagState.questions].slice(0, 100)
+    };
+    await saveMailbagState(mailbagState);
+    await interaction.reply({
+      content: `Mailbag question #${entry.id} submitted for the next podcast.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "mailbag-status") {
+    const mailbagState = await getMailbagState();
+    const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
+    const lines = guildMailbagState.questions.slice(0, 8).map((question) => {
+      return `#${question.id} [${question.status}] ${question.askedByDisplayName}: ${question.question}`;
+    });
+
+    await interaction.reply({
+      content: lines.length > 0 ? lines.join("\n") : "No mailbag questions yet.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "mailbag-clear") {
+    const scope = interaction.options.getString("scope", true);
+    const mailbagState = await getMailbagState();
+    const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
+    mailbagState[guildId] = {
+      nextQuestionId: guildMailbagState.nextQuestionId,
+      questions:
+        scope === "all"
+          ? []
+          : guildMailbagState.questions.filter((question) => question.status !== "used")
+    };
+    await saveMailbagState(mailbagState);
+    await interaction.reply({
+      content: scope === "all" ? "All mailbag questions cleared." : "Used mailbag questions cleared.",
       ephemeral: true
     });
     return;

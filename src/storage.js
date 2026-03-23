@@ -8,6 +8,7 @@ const reminderStatePath = path.join(dataDir, "reminder-state.json");
 const fantasyStatePath = path.join(dataDir, "fantasy-state.json");
 const mediaRegistryPath = path.join(dataDir, "media-registry.json");
 const reporterStatePath = path.join(dataDir, "reporter-state.json");
+const mailbagStatePath = path.join(dataDir, "mailbag-state.json");
 
 async function ensureDataDir() {
   await mkdir(dataDir, { recursive: true });
@@ -112,5 +113,14 @@ export async function getReporterState() {
 
 export async function saveReporterState(nextState) {
   await writeState("reporter-state", reporterStatePath, nextState);
+  return nextState;
+}
+
+export async function getMailbagState() {
+  return readState("mailbag-state", mailbagStatePath, {});
+}
+
+export async function saveMailbagState(nextState) {
+  await writeState("mailbag-state", mailbagStatePath, nextState);
   return nextState;
 }
