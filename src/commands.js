@@ -232,7 +232,7 @@ export const commandDefinitions = [
       option
         .setName("inquiry_id")
         .setDescription("The inquiry number.")
-        .setRequired(true)
+        .setRequired(false)
     )
     .addStringOption((option) =>
       option
@@ -314,8 +314,53 @@ function findEspnTeam(snapshot, query) {
 function getReporterStateForGuild(reporterState, guildId) {
   return reporterState[guildId] || {
     nextInquiryId: 1,
-    inquiries: []
+    inquiries: [],
+    triggerKeys: {}
   };
+}
+
+function getOpenReporterInquiriesForUser(guildReporterState, userId) {
+  return guildReporterState.inquiries.filter(
+    (inquiry) => inquiry.status === "open" && inquiry.discordUserId === userId
+  );
+}
+
+function getReporterAnnouncementChannelId(guildConfig) {
+  return (
+    guildConfig.socialChannelId ||
+    guildConfig.transactionsChannelId ||
+    guildConfig.podcastChannelId ||
+    null
+  );
+}
+
+async function notifyReporterInquiry(client, guildConfig, inquiry) {
+  const announcementChannelId = getReporterAnnouncementChannelId(guildConfig);
+  if (announcementChannelId) {
+    const channel = await client.channels.fetch(announcementChannelId).catch(() => null);
+    if (channel?.isTextBased()) {
+      await channel.send({
+        content: [
+          `Reporter request for comment for ${inquiry.teamName} (${inquiry.manager})`,
+          `${userMention(inquiry.discordUserId)} ${inquiry.prompt}`,
+          "Reply with `/reporter-respond response:...` if this is your only open request.",
+          `If you have multiple open requests, use \`/reporter-respond inquiry_id:${inquiry.id} response:...\``
+        ].join("\n"),
+        allowedMentions: { users: [inquiry.discordUserId] }
+      });
+    }
+  }
+
+  const user = await client.users.fetch(inquiry.discordUserId).catch(() => null);
+  if (user) {
+    await user.send([
+      `Reporter request for comment for ${inquiry.teamName}:`,
+      inquiry.prompt,
+      "",
+      "Reply in the server with `/reporter-respond response:...` if this is your only open request.",
+      `Or use \`/reporter-respond inquiry_id:${inquiry.id} response:...\` if you have multiple open requests.`
+    ].join("\n")).catch(() => {});
+  }
 }
 
 export async function handleCommand(interaction) {
@@ -696,15 +741,17 @@ export async function handleCommand(interaction) {
 
     reporterState[guildId] = {
       nextInquiryId: guildReporterState.nextInquiryId + 1,
-      inquiries: [inquiry, ...guildReporterState.inquiries].slice(0, 50)
+      inquiries: [inquiry, ...guildReporterState.inquiries].slice(0, 50),
+      triggerKeys: guildReporterState.triggerKeys || {}
     };
     await saveReporterState(reporterState);
+    await notifyReporterInquiry(interaction.client, guildConfig, inquiry);
 
     await interaction.reply({
       content: [
         `Request for comment #${inquiry.id} opened for ${matchedTeam.name} (${matchedTeam.manager}).`,
         `${userMention(link.discordUserId)} reporter request: ${inquiry.prompt}`,
-        `Reply with \`/reporter-respond inquiry_id:${inquiry.id} response:...\``,
+        `They can reply with \`/reporter-respond response:...\` if this is their only open request.`,
         `This quote will feed: ${features.join(", ")}`
       ].join("\n"),
       allowedMentions: { users: [link.discordUserId] }
@@ -713,15 +760,24 @@ export async function handleCommand(interaction) {
   }
 
   if (interaction.commandName === "reporter-respond") {
-    const inquiryId = interaction.options.getInteger("inquiry_id", true);
+    const inquiryId = interaction.options.getInteger("inquiry_id");
     const response = interaction.options.getString("response", true).trim();
     const reporterState = await getReporterState();
     const guildReporterState = getReporterStateForGuild(reporterState, guildId);
-    const inquiry = guildReporterState.inquiries.find((item) => item.id === inquiryId);
+    const openInquiries = getOpenReporterInquiriesForUser(guildReporterState, interaction.user.id);
+    const inquiry = inquiryId
+      ? guildReporterState.inquiries.find((item) => item.id === inquiryId)
+      : openInquiries.length === 1
+        ? openInquiries[0]
+        : null;
 
     if (!inquiry) {
       await interaction.reply({
-        content: `I couldn't find reporter inquiry #${inquiryId}.`,
+        content: inquiryId
+          ? `I couldn't find reporter inquiry #${inquiryId}.`
+          : openInquiries.length === 0
+            ? "You do not have any open reporter requests."
+            : `You have ${openInquiries.length} open requests. Please include \`inquiry_id\`.`,
         ephemeral: true
       });
       return;

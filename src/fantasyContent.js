@@ -382,15 +382,17 @@ export async function buildTransactionGrades(
   snapshot,
   timezone,
   registryText = "",
-  linkedManagersContext = ""
+  linkedManagersContext = "",
+  reporterContextText = ""
 ) {
   return generateText({
     systemPrompt:
-      "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team.",
+      "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team. If reporter quotes are provided, weave the strongest quote into the coverage when it fits.",
     userPrompt: [
       `Generate instant transaction grades for ${formatDateTime(new Date(), timezone)}.`,
       registryText ? `Media registry:\n${registryText}` : "",
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
+      reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
       "Transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5))
     ].filter(Boolean).join("\n\n")

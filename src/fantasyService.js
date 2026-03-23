@@ -198,7 +198,8 @@ function appendMentionFooter(content, footer) {
 function getReporterStateForGuild(reporterState, guildId) {
   return reporterState[guildId] || {
     nextInquiryId: 1,
-    inquiries: []
+    inquiries: [],
+    triggerKeys: {}
   };
 }
 
@@ -215,6 +216,263 @@ function getReporterQuotesForFeature(reporterState, guildId, feature) {
       response: inquiry.response,
       features: inquiry.features
     }));
+}
+
+function markReporterTrigger(reporterState, guildId, triggerKey) {
+  const state = getReporterStateForGuild(reporterState, guildId);
+  reporterState[guildId] = {
+    ...state,
+    triggerKeys: {
+      ...(state.triggerKeys || {}),
+      [triggerKey]: new Date().toISOString()
+    }
+  };
+}
+
+function wasReporterTriggerHandled(reporterState, guildId, triggerKey) {
+  const state = getReporterStateForGuild(reporterState, guildId);
+  return Boolean(state.triggerKeys?.[triggerKey]);
+}
+
+function getReporterAnnouncementChannelId(guildConfig) {
+  return (
+    guildConfig.socialChannelId ||
+    guildConfig.transactionsChannelId ||
+    guildConfig.podcastChannelId ||
+    null
+  );
+}
+
+async function notifyReporterInquiry(client, guildId, guildConfig, inquiry, reasonLabel) {
+  const announcementChannelId = getReporterAnnouncementChannelId(guildConfig);
+  if (announcementChannelId) {
+    const channel = await client.channels.fetch(announcementChannelId).catch(() => null);
+    if (channel?.isTextBased()) {
+      await channel.send({
+        content: [
+          `Reporter request for comment: ${reasonLabel}`,
+          `${inquiry.teamName} (${inquiry.manager}) - ${inquiry.prompt}`,
+          `${`<@${inquiry.discordUserId}>`} respond with \`/reporter-respond response:...\``,
+          inquiry.features.length > 0 ? `This may appear in: ${inquiry.features.join(", ")}` : ""
+        ].filter(Boolean).join("\n"),
+        allowedMentions: { users: [inquiry.discordUserId] }
+      });
+    }
+  }
+
+  const user = await client.users.fetch(inquiry.discordUserId).catch(() => null);
+  if (user) {
+    await user.send([
+      `Reporter request for comment for ${inquiry.teamName}:`,
+      inquiry.prompt,
+      "",
+      `Reply in the server with \`/reporter-respond response:...\``,
+      inquiry.features.length > 0 ? `Your quote may appear in: ${inquiry.features.join(", ")}` : ""
+    ].filter(Boolean).join("\n")).catch(() => {});
+  }
+}
+
+async function createReporterInquiry(
+  client,
+  reporterState,
+  guildId,
+  guildConfig,
+  inquiryInput,
+  reasonLabel
+) {
+  const state = getReporterStateForGuild(reporterState, guildId);
+  const inquiry = {
+    id: state.nextInquiryId,
+    status: "open",
+    askedAt: new Date().toISOString(),
+    askedByUserId: "bot",
+    response: "",
+    respondedAt: null,
+    respondedByUserId: null,
+    ...inquiryInput
+  };
+
+  reporterState[guildId] = {
+    ...state,
+    nextInquiryId: state.nextInquiryId + 1,
+    inquiries: [inquiry, ...state.inquiries].slice(0, 75)
+  };
+
+  await notifyReporterInquiry(client, guildId, guildConfig, inquiry, reasonLabel);
+  return inquiry;
+}
+
+async function maybeCreateAutomaticReporterInquiries(
+  client,
+  guildId,
+  guildConfig,
+  snapshot,
+  reporterState,
+  logger = console
+) {
+  const links = getCurrentEspnLinks(guildConfig);
+  if (Object.keys(links).length === 0) {
+    return;
+  }
+
+  for (const transaction of snapshot.transactions.slice(0, 5)) {
+    const link = links[String(transaction.teamId)];
+    if (!link) {
+      continue;
+    }
+
+    if (transaction.type.includes("TRADE")) {
+      const triggerKey = `trade:${transaction.id}`;
+      if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
+        await createReporterInquiry(
+          client,
+          reporterState,
+          guildId,
+          guildConfig,
+          {
+            teamId: transaction.teamId,
+            teamName: transaction.teamName,
+            manager: snapshot.teams.find((team) => team.id === transaction.teamId)?.manager || "Unknown manager",
+            discordUserId: link.discordUserId,
+            prompt: `The league office flagged your trade as controversial. What's your defense of this move?`,
+            features: ["transactions", "social", "podcast"]
+          },
+          "Controversial trade"
+        );
+        markReporterTrigger(reporterState, guildId, triggerKey);
+      }
+    }
+
+    if (transaction.biddingAmount && transaction.biddingAmount >= 15) {
+      const triggerKey = `waiver:${transaction.id}`;
+      if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
+        await createReporterInquiry(
+          client,
+          reporterState,
+          guildId,
+          guildConfig,
+          {
+            teamId: transaction.teamId,
+            teamName: transaction.teamName,
+            manager: snapshot.teams.find((team) => team.id === transaction.teamId)?.manager || "Unknown manager",
+            discordUserId: link.discordUserId,
+            prompt: `You dropped $${transaction.biddingAmount} on this move. Tell the people why the bid was worth it.`,
+            features: ["transactions", "social", "podcast"]
+          },
+          "Big waiver bid"
+        );
+        markReporterTrigger(reporterState, guildId, triggerKey);
+      }
+    }
+  }
+
+  const rankedTeams = [...snapshot.teams].sort((a, b) => {
+    if (b.wins !== a.wins) {
+      return b.wins - a.wins;
+    }
+
+    return b.pointsFor - a.pointsFor;
+  });
+
+  const rivalryMatchup = snapshot.matchups
+    .filter((matchup) => matchup.homeTeamId && matchup.awayTeamId)
+    .map((matchup) => {
+      const homeIndex = rankedTeams.findIndex((team) => team.id === matchup.homeTeamId);
+      const awayIndex = rankedTeams.findIndex((team) => team.id === matchup.awayTeamId);
+      return {
+        ...matchup,
+        rivalryScore: (homeIndex + 1) + (awayIndex + 1)
+      };
+    })
+    .sort((a, b) => a.rivalryScore - b.rivalryScore)[0];
+
+  if (rivalryMatchup) {
+    const sortedIds = [rivalryMatchup.homeTeamId, rivalryMatchup.awayTeamId].sort((a, b) => a - b);
+    const triggerKey = `rivalry:${snapshot.currentScoringPeriod}:${sortedIds.join("-")}`;
+    if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
+      for (const teamId of sortedIds) {
+        const link = links[String(teamId)];
+        const team = snapshot.teams.find((entry) => entry.id === teamId);
+        if (!link || !team) {
+          continue;
+        }
+
+        const opponentId = sortedIds.find((id) => id !== teamId);
+        const opponent = snapshot.teams.find((entry) => entry.id === opponentId);
+        await createReporterInquiry(
+          client,
+          reporterState,
+          guildId,
+          guildConfig,
+          {
+            teamId,
+            teamName: team.name,
+            manager: team.manager,
+            discordUserId: link.discordUserId,
+            prompt: `Rivalry week is heating up against ${opponent?.name || "your opponent"}. What's your message before the matchup swings?`,
+            features: ["social", "podcast"]
+          },
+          "Rivalry week spotlight"
+        );
+      }
+      markReporterTrigger(reporterState, guildId, triggerKey);
+    }
+  }
+
+  const blowoutMatchup = snapshot.matchups
+    .filter((matchup) => matchup.homeTeamId && matchup.awayTeamId)
+    .map((matchup) => ({
+      ...matchup,
+      margin: Math.abs(matchup.homeScore - matchup.awayScore)
+    }))
+    .sort((a, b) => b.margin - a.margin)[0];
+
+  if (blowoutMatchup && blowoutMatchup.margin >= 15) {
+    const winnerTeamId =
+      blowoutMatchup.homeScore >= blowoutMatchup.awayScore
+        ? blowoutMatchup.homeTeamId
+        : blowoutMatchup.awayTeamId;
+    const loserTeamId =
+      winnerTeamId === blowoutMatchup.homeTeamId
+        ? blowoutMatchup.awayTeamId
+        : blowoutMatchup.homeTeamId;
+    const triggerKey = `blowout:${snapshot.currentScoringPeriod}:${winnerTeamId}:${loserTeamId}`;
+    if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
+      for (const [teamId, prompt] of [
+        [
+          winnerTeamId,
+          "That result looked like a statement win. What's your message after running up the score?"
+        ],
+        [
+          loserTeamId,
+          "The league just watched that matchup get away from you. What happened out there?"
+        ]
+      ]) {
+        const link = links[String(teamId)];
+        const team = snapshot.teams.find((entry) => entry.id === teamId);
+        if (!link || !team) {
+          continue;
+        }
+
+        await createReporterInquiry(
+          client,
+          reporterState,
+          guildId,
+          guildConfig,
+          {
+            teamId,
+            teamName: team.name,
+            manager: team.manager,
+            discordUserId: link.discordUserId,
+            prompt,
+            features: ["social", "podcast"]
+          },
+          "Blowout result"
+        );
+      }
+      markReporterTrigger(reporterState, guildId, triggerKey);
+    }
+  }
 }
 
 function parseRegistrySections(text) {
@@ -251,11 +509,15 @@ async function maybeSendInstantTransactionGrades(client, guildId, guildConfig, s
   }
 
   const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
+  const reporterContextText = formatReporterContext(
+    getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
+  );
   const grades = await buildTransactionGrades(
     snapshot,
     guildConfig.timezone,
     formatRegistryForPrompt(registry),
-    linkedManagersContext
+    linkedManagersContext,
+    reporterContextText
   );
   await channel.send(appendMentionFooter(grades, buildMentionFooter(snapshot, guildConfig, "transactions")));
 
@@ -405,6 +667,15 @@ export async function runFantasyJobs(client, logger = console) {
     };
 
     try {
+      await maybeCreateAutomaticReporterInquiries(
+        client,
+        guildId,
+        guildConfig,
+        snapshot,
+        reporterState,
+        logger
+      );
+
       nextState[guildId] = await maybeSendInstantTransactionGrades(
         client,
         guildId,
@@ -517,13 +788,17 @@ export async function handleFantasyTest(testType, guildId, client) {
 
   if (normalizedType === "transaction-grades") {
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
+    );
     const content = testType.startsWith("demo-")
       ? buildDemoTransactionGrades(snapshot, timezone)
       : await buildTransactionGrades(
           snapshot,
           timezone,
           "",
-          linkedManagersContext
+          linkedManagersContext,
+          reporterContextText
         );
     const finalContent = appendMentionFooter(
       content,
