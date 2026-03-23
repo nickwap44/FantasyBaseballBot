@@ -224,7 +224,7 @@ export async function buildSocialPost(
 ) {
   return generateText({
     systemPrompt:
-      "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave a good quote in when it fits.",
+      "You write one fake Twitter/X-style post for a fantasy baseball league as the BBA League Insider. It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. If the league is still pre-draft, make it about draft anticipation, quiet tension, or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. Do not include hashtags unless they genuinely add something.",
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
@@ -241,10 +241,10 @@ export async function buildSocialPost(
 export function buildDemoSocialPost(snapshot, timezone) {
   const topTransaction = snapshot.transactions[0];
   return [
-    `**Social Feed Demo**`,
+    `**BBA League Insider Demo**`,
     `Posted ${formatDateTime(new Date(), timezone)}`,
     "",
-    `"Waiver Wire Wizards just dropped $${topTransaction.biddingAmount} on Jackson Holliday like they're one move away from a dynasty. Respect the aggression, fear the hubris."`
+    `BBA League Insider: Hearing Waiver Wire Wizards dropped $${topTransaction.biddingAmount} on Jackson Holliday like they think the trophy gets handed out in April. League sources say the room respects the aggression and fears the hubris.`
   ].join("\n");
 }
 
