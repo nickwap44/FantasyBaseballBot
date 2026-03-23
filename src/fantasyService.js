@@ -103,6 +103,84 @@ function formatRegistryForPrompt(registry) {
   ].filter(Boolean).join("\n\n");
 }
 
+function getCurrentEspnLinks(guildConfig) {
+  return guildConfig.espnDiscordLinks || {};
+}
+
+function getLinkedManagersContext(snapshot, guildConfig) {
+  const links = getCurrentEspnLinks(guildConfig);
+  const lines = snapshot.teams
+    .filter((team) => links[String(team.id)])
+    .map((team) => {
+      const link = links[String(team.id)];
+      return `- ${team.name} managed by ${team.manager} is linked to <@${link.discordUserId}>`;
+    });
+
+  return lines.join("\n");
+}
+
+function getRelevantTeamIds(snapshot, feature) {
+  if (feature === "transactions") {
+    return snapshot.transactions.slice(0, 5).map((transaction) => transaction.teamId);
+  }
+
+  if (feature === "social") {
+    return [
+      ...snapshot.transactions.slice(0, 3).map((transaction) => transaction.teamId),
+      ...snapshot.teams.slice(0, 3).map((team) => team.id)
+    ];
+  }
+
+  if (feature === "podcast") {
+    return [
+      ...snapshot.transactions.slice(0, 4).map((transaction) => transaction.teamId),
+      ...snapshot.matchups.flatMap((matchup) => [matchup.homeTeamId, matchup.awayTeamId]).slice(0, 6)
+    ];
+  }
+
+  return [];
+}
+
+function buildMentionFooter(snapshot, guildConfig, feature) {
+  const links = getCurrentEspnLinks(guildConfig);
+  const teamsById = new Map(snapshot.teams.map((team) => [String(team.id), team]));
+  const featured = [];
+
+  for (const teamId of getRelevantTeamIds(snapshot, feature)) {
+    const key = String(teamId);
+    const link = links[key];
+    const team = teamsById.get(key);
+    if (!link || !team) {
+      continue;
+    }
+
+    if (featured.some((entry) => entry.discordUserId === link.discordUserId)) {
+      continue;
+    }
+
+    featured.push({
+      discordUserId: link.discordUserId,
+      teamName: team.name
+    });
+  }
+
+  if (featured.length === 0) {
+    return "";
+  }
+
+  return `Featured managers: ${featured
+    .map((entry) => `<@${entry.discordUserId}> (${entry.teamName})`)
+    .join(", ")}`;
+}
+
+function appendMentionFooter(content, footer) {
+  if (!footer) {
+    return content;
+  }
+
+  return [content.trim(), "", footer].filter(Boolean).join("\n");
+}
+
 function parseRegistrySections(text) {
   const sections = {
     runningJokes: "",
@@ -139,9 +217,10 @@ async function maybeSendInstantTransactionGrades(client, guildId, guildConfig, s
   const grades = await buildTransactionGrades(
     snapshot,
     guildConfig.timezone,
-    formatRegistryForPrompt(registry)
+    formatRegistryForPrompt(registry),
+    getLinkedManagersContext(snapshot, guildConfig)
   );
-  await channel.send(grades);
+  await channel.send(appendMentionFooter(grades, buildMentionFooter(snapshot, guildConfig, "transactions")));
 
   return {
     ...state,
@@ -199,8 +278,12 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   }
 
   if (feature === "social") {
-    const content = await buildSocialPost(snapshot, guildConfig.timezone);
-    await channel.send(content);
+    const content = await buildSocialPost(
+      snapshot,
+      guildConfig.timezone,
+      getLinkedManagersContext(snapshot, guildConfig)
+    );
+    await channel.send(appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "social")));
     return state;
   }
 
@@ -222,14 +305,16 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       previousMemory,
       guildConfig.timezone,
       renderer,
-      hostNames
+      hostNames,
+      getLinkedManagersContext(snapshot, guildConfig)
     );
     await channel.send({
       content: [
         "Weekly fantasy podcast is live.",
         `AI-generated voices and script based on league results and transaction activity. Renderer: ${renderer}.`,
         "",
-        podcast.summary
+        podcast.summary,
+        buildMentionFooter(snapshot, guildConfig, "podcast")
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
     });
@@ -384,13 +469,22 @@ export async function handleFantasyTest(testType, guildId, client) {
   if (normalizedType === "transaction-grades") {
     const content = testType.startsWith("demo-")
       ? buildDemoTransactionGrades(snapshot, timezone)
-      : await buildTransactionGrades(snapshot, timezone);
+      : await buildTransactionGrades(
+          snapshot,
+          timezone,
+          "",
+          getLinkedManagersContext(snapshot, guildConfig || {})
+        );
+    const finalContent = appendMentionFooter(
+      content,
+      buildMentionFooter(snapshot, guildConfig || {}, "transactions")
+    );
     if (testType.startsWith("demo-")) {
-      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
+      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", finalContent);
       return "Demo transaction grades posted.";
     }
 
-    return content;
+    return finalContent;
   }
 
   if (normalizedType === "power") {
@@ -408,13 +502,21 @@ export async function handleFantasyTest(testType, guildId, client) {
   if (normalizedType === "social") {
     const content = testType.startsWith("demo-")
       ? buildDemoSocialPost(snapshot, timezone)
-      : await buildSocialPost(snapshot, timezone);
+      : await buildSocialPost(
+          snapshot,
+          timezone,
+          getLinkedManagersContext(snapshot, guildConfig || {})
+        );
+    const finalContent = appendMentionFooter(
+      content,
+      buildMentionFooter(snapshot, guildConfig || {}, "social")
+    );
     if (testType.startsWith("demo-")) {
-      await sendTestContentToFeatureChannel(client, guildConfig, "social", content);
+      await sendTestContentToFeatureChannel(client, guildConfig, "social", finalContent);
       return "Demo social post sent.";
     }
 
-    return content;
+    return finalContent;
   }
 
   if (normalizedType === "podcast") {
@@ -441,7 +543,8 @@ export async function handleFantasyTest(testType, guildId, client) {
             : "",
           timezone,
           renderer,
-          hostNames
+          hostNames,
+          getLinkedManagersContext(snapshot, guildConfig || {})
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
@@ -458,7 +561,8 @@ export async function handleFantasyTest(testType, guildId, client) {
         testType.startsWith("demo-") ? "Demo podcast test episode." : "Manual podcast test episode.",
         `AI-generated voices and script. Renderer: ${renderer}.`,
         "",
-        podcast.summary
+        podcast.summary,
+        buildMentionFooter(snapshot, guildConfig || {}, "podcast")
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
     });

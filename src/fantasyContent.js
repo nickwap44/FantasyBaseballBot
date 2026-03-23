@@ -173,12 +173,13 @@ export function buildDemoPowerRankings(snapshot, timezone) {
   ].join("\n");
 }
 
-export async function buildSocialPost(snapshot, timezone) {
+export async function buildSocialPost(snapshot, timezone, linkedManagersContext = "") {
   return generateText({
     systemPrompt:
       "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk.",
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
+      linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
       "Recent transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5)),
       "",
@@ -371,13 +372,19 @@ async function buildPodcastMemory(transcript) {
   });
 }
 
-export async function buildTransactionGrades(snapshot, timezone, registryText = "") {
+export async function buildTransactionGrades(
+  snapshot,
+  timezone,
+  registryText = "",
+  linkedManagersContext = ""
+) {
   return generateText({
     systemPrompt:
       "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant.",
     userPrompt: [
       `Generate instant transaction grades for ${formatDateTime(new Date(), timezone)}.`,
       registryText ? `Media registry:\n${registryText}` : "",
+      linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
       "Transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5))
     ].filter(Boolean).join("\n\n")
@@ -432,13 +439,17 @@ export async function buildPodcastPackage(
   podcastHistory,
   timezone,
   renderer = config.podcastRenderer,
-  hostNames = {}
+  hostNames = {},
+  linkedManagersContext = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter.",
-    userPrompt: buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
+      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+    userPrompt: [
+      buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
+      linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : ""
+    ].filter(Boolean).join("\n\n"),
     temperature: 1
   });
 
