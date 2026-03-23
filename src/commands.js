@@ -18,7 +18,8 @@ function getDefaultGuildConfig() {
     transactionsChannelId: appConfig.transactionsChannelId,
     powerRankingsChannelId: appConfig.powerRankingsChannelId,
     socialChannelId: appConfig.socialChannelId,
-    podcastChannelId: appConfig.podcastChannelId
+    podcastChannelId: appConfig.podcastChannelId,
+    podcastManualContext: ""
   };
 }
 
@@ -107,6 +108,28 @@ export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName("fantasy-status")
     .setDescription("Show the current ESPN and fantasy content channel setup."),
+  new SlashCommandBuilder()
+    .setName("podcast-context")
+    .setDescription("Add or manage extra context the podcast hosts can reference.")
+    .addStringOption((option) =>
+      option
+        .setName("action")
+        .setDescription("How to update the saved podcast context.")
+        .setRequired(true)
+        .addChoices(
+          { name: "add", value: "add" },
+          { name: "replace", value: "replace" },
+          { name: "show", value: "show" },
+          { name: "clear", value: "clear" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("text")
+        .setDescription("Context to store for future podcast episodes.")
+        .setRequired(false)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
     .setName("fantasy-test")
     .setDescription("Run a live test against ESPN or generate a sample content post.")
@@ -277,8 +300,55 @@ export async function handleCommand(interaction) {
         `Transactions channel: ${guildConfig.transactionsChannelId ? `<#${guildConfig.transactionsChannelId}>` : "not set"}`,
         `Power rankings channel: ${guildConfig.powerRankingsChannelId ? `<#${guildConfig.powerRankingsChannelId}>` : "not set"}`,
         `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,
-        `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`
+        `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`,
+        `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`
       ].join("\n"),
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "podcast-context") {
+    const action = interaction.options.getString("action", true);
+    const text = interaction.options.getString("text")?.trim() || "";
+    const existing = guildConfig.podcastManualContext?.trim() || "";
+
+    if ((action === "add" || action === "replace") && !text) {
+      await interaction.reply({
+        content: "Please include `text` when using `add` or `replace`.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (action === "show") {
+      await interaction.reply({
+        content: existing || "No manual podcast context is saved yet.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (action === "clear") {
+      guildConfig.podcastManualContext = "";
+      await saveGuildConfig(guildId, guildConfig);
+      await interaction.reply({
+        content: "Podcast manual context cleared.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const nextText = action === "replace"
+      ? text
+      : [existing, text].filter(Boolean).join("\n\n");
+
+    guildConfig.podcastManualContext = nextText.slice(0, 4000);
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: action === "replace"
+        ? "Podcast manual context replaced."
+        : "Podcast manual context appended.",
       ephemeral: true
     });
     return;

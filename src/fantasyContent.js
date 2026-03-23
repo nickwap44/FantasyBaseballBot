@@ -429,9 +429,14 @@ export async function buildPodcastPackage(snapshot, podcastHistory, timezone, re
 export async function buildDemoPodcastPackage(
   snapshot,
   timezone,
-  renderer = config.podcastRenderer
+  renderer = config.podcastRenderer,
+  manualContext = ""
 ) {
+  const manualContextLine = manualContext.trim()
+    ? `Mason: Before we get rolling, producer's note for the room: ${manualContext.trim().slice(0, 280)}`
+    : null;
   const transcript = [
+    ...(manualContextLine ? [manualContextLine] : []),
     "Mason: Welcome to The Backyard Bullpen. We are back, the Backyard Baseball Association is already noisy, and Rico has somehow reopened the panic meter before breakfast.",
     "Rico: Because the panic meter is a public service, Mason. I am here for the people.",
     "Elena: You are here for the overreaction. The people are just caught in the blast radius.",
@@ -452,6 +457,7 @@ export async function buildDemoPodcastPackage(
 
   const summary = [
     "- Mason framed the episode as a proper Backyard Bullpen show open and steered the room through the familiar chaos.",
+    ...(manualContextLine ? ["- The hosts acknowledged the latest producer note and folded it into the show setup."] : []),
     "- Rico revived the April coronation bit around the Jackson Holliday add and fully embraced the panic meter nonsense again.",
     `- Elena played cleanup with dry humor and gave a more grounded read on ${snapshot.teams[1].name} as a real threat.`,
     "- The panic meter, disrespectful-before-breakfast trade offers, and Elena's rare laughter all came back as running bits."
@@ -459,7 +465,7 @@ export async function buildDemoPodcastPackage(
   const memory = [
     "Running jokes: Rico's annual April coronation, the panic meter, disrespectful-before-breakfast trade offers, and Mason noting every time Elena visibly enjoys the chaos.",
     "Host chemistry: Mason plays ringmaster, Rico detonates takes on purpose, and Elena dryly punctures both of them before reluctantly laughing.",
-    `League storylines: ${snapshot.teams[0].name} still sets the pace, while ${snapshot.teams[1].name} keeps drawing contender talk because of roster balance and steady pressure.`
+    `League storylines: ${snapshot.teams[0].name} still sets the pace, while ${snapshot.teams[1].name} keeps drawing contender talk because of roster balance and steady pressure.${manualContext.trim() ? ` Manual context in play: ${manualContext.trim().slice(0, 180)}` : ""}`
   ].join("\n");
 
   return {

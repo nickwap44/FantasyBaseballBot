@@ -207,7 +207,10 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   if (feature === "podcast") {
     const previousMemory = [
       state.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
-      formatRegistryForPrompt(registry)
+      formatRegistryForPrompt(registry),
+      guildConfig.podcastManualContext?.trim()
+        ? `Producer notes and manual context:\n${guildConfig.podcastManualContext.trim()}`
+        : ""
     ].filter(Boolean).join("\n\n");
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
@@ -421,8 +424,20 @@ export async function handleFantasyTest(testType, guildId, client) {
           ? "realtime"
           : "tts";
     const podcast = testType.startsWith("demo-")
-      ? await buildDemoPodcastPackage(snapshot, timezone, renderer)
-      : await buildPodcastPackage(snapshot, "", timezone, renderer);
+      ? await buildDemoPodcastPackage(
+          snapshot,
+          timezone,
+          renderer,
+          guildConfig?.podcastManualContext || ""
+        )
+      : await buildPodcastPackage(
+          snapshot,
+          guildConfig?.podcastManualContext
+            ? `Producer notes and manual context:\n${guildConfig.podcastManualContext}`
+            : "",
+          timezone,
+          renderer
+        );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
       throw new Error("Podcast channel is not configured.");
