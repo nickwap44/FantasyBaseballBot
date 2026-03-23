@@ -74,7 +74,7 @@ function isTimeToRun(now, timezone, feature) {
   }
 
   if (feature === "social") {
-    return hour === 13 && minute < 10;
+    return hour === 14 && minute < 10;
   }
 
   if (feature === "power") {
