@@ -3,13 +3,15 @@ import { ensureBootstrapGuildConfig } from "./bootstrapConfig.js";
 import { handleCommand } from "./commands.js";
 import { config } from "./config.js";
 import { initializeDatabase, isDatabaseConfigured } from "./database.js";
-import { handleFantasyReactionAdd, startFantasyLoop } from "./fantasyService.js";
+import { handleFantasyReactionAdd, handleFantasySocialMessage, startFantasyLoop } from "./fantasyService.js";
 import { startReminderLoop } from "./reminderService.js";
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessageReactions
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.MessageContent
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
@@ -60,6 +62,14 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     await handleFantasyReactionAdd(reaction, user, client);
   } catch (error) {
     console.error("Fantasy reaction handler failed:", error);
+  }
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    await handleFantasySocialMessage(message);
+  } catch (error) {
+    console.error("Fantasy social message handler failed:", error);
   }
 });
 

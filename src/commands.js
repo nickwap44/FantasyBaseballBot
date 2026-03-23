@@ -22,6 +22,7 @@ function getDefaultGuildConfig() {
     socialChannelId: appConfig.socialChannelId,
     reporterChannelId: null,
     podcastChannelId: appConfig.podcastChannelId,
+    fantasyTrollEnabled: false,
     podcastManualContext: "",
     podcastHostNames: {
       lead: "Mason",
@@ -118,6 +119,16 @@ export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName("fantasy-status")
     .setDescription("Show the current ESPN and fantasy content channel setup."),
+  new SlashCommandBuilder()
+    .setName("troll-toggle")
+    .setDescription("Enable or disable the Fantasy Troll in the social channel.")
+    .addBooleanOption((option) =>
+      option
+        .setName("enabled")
+        .setDescription("Turn the Fantasy Troll on or off.")
+        .setRequired(true)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
     .setName("podcast-context")
     .setDescription("Add or manage extra context the podcast hosts can reference.")
@@ -504,11 +515,24 @@ export async function handleCommand(interaction) {
         `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,
         `Reporter channel: ${guildConfig.reporterChannelId ? `<#${guildConfig.reporterChannelId}>` : "not set"}`,
         `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`,
+        `Fantasy Troll: ${guildConfig.fantasyTrollEnabled ? "enabled" : "disabled"}`,
         `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
         `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
         `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`,
         `Reporter inquiries: ${guildReporterState.inquiries.length}`
       ].join("\n"),
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "troll-toggle") {
+    guildConfig.fantasyTrollEnabled = interaction.options.getBoolean("enabled", true);
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: guildConfig.fantasyTrollEnabled
+        ? "Fantasy Troll is enabled for the social channel."
+        : "Fantasy Troll is disabled.",
       ephemeral: true
     });
     return;

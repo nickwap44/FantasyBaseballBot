@@ -27,6 +27,7 @@ import {
 import { config } from "./config.js";
 import { savePodcastEpisode } from "./database.js";
 import { getMockLeagueSnapshot } from "./mockLeague.js";
+import { generateText } from "./openaiClient.js";
 import { getDateInTimezone } from "./time.js";
 
 function getFeatureChannelId(guildConfig, feature) {
@@ -234,6 +235,20 @@ function appendMentionFooter(content, footer) {
   }
 
   return [content.trim(), "", footer].filter(Boolean).join("\n");
+}
+
+async function buildFantasyTrollReply(messageContent) {
+  return generateText({
+    systemPrompt:
+      "You are Fantasy Troll, a smug but playful fantasy baseball contrarian in a Discord social channel. Reply directly to the user's take by contradicting it, poking holes in it, or reframing it in the most annoying plausible way. Keep it to 1-2 short sentences, under 220 characters, and make it feel teasing rather than hateful. Do not use profanity, slurs, threats, or harassment. Do not mention being an AI.",
+    userPrompt: `Reply to this post with a contradiction:\n\n${messageContent}`
+  }).then((text) => {
+    if (text.trim()) {
+      return text.trim();
+    }
+
+    return "Counterpoint: that take sounds confident for something that's going to age badly by tomorrow.";
+  });
 }
 
 const EMERGENCY_REACTION_THRESHOLD = 5;
@@ -1031,6 +1046,38 @@ export async function handleFantasyReactionAdd(reaction, user, client, logger = 
     });
   } catch (error) {
     logger.error(`Emergency podcast trigger failed for guild ${guildId}:`, error);
+  }
+}
+
+export async function handleFantasySocialMessage(message, logger = console) {
+  if (!message.inGuild() || message.author?.bot) {
+    return;
+  }
+
+  const content = message.content?.trim();
+  if (!content) {
+    return;
+  }
+
+  const guildConfig = await getGuildConfig(message.guildId);
+  if (!guildConfig?.fantasyTrollEnabled) {
+    return;
+  }
+
+  if (!guildConfig.socialChannelId || message.channelId !== guildConfig.socialChannelId) {
+    return;
+  }
+
+  try {
+    const reply = await buildFantasyTrollReply(content);
+    await message.reply({
+      content: reply,
+      allowedMentions: {
+        repliedUser: true
+      }
+    });
+  } catch (error) {
+    logger.error(`Fantasy Troll reply failed for guild ${message.guildId}:`, error);
   }
 }
 

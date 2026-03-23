@@ -18,6 +18,7 @@ export async function ensureBootstrapGuildConfig() {
     socialChannelId: existing?.socialChannelId || appConfig.socialChannelId,
     reporterChannelId: existing?.reporterChannelId || null,
     podcastChannelId: existing?.podcastChannelId || appConfig.podcastChannelId,
+    fantasyTrollEnabled: existing?.fantasyTrollEnabled ?? false,
     podcastManualContext: existing?.podcastManualContext || "",
     podcastHostNames: {
       lead: existing?.podcastHostNames?.lead || "Mason",
@@ -43,6 +44,7 @@ export async function ensureBootstrapGuildConfig() {
     existing.socialChannelId !== nextConfig.socialChannelId ||
     existing.reporterChannelId !== nextConfig.reporterChannelId ||
     existing.podcastChannelId !== nextConfig.podcastChannelId ||
+    existing.fantasyTrollEnabled !== nextConfig.fantasyTrollEnabled ||
     existing.podcastManualContext !== nextConfig.podcastManualContext ||
     existing.podcastHostNames?.lead !== nextConfig.podcastHostNames.lead ||
     existing.podcastHostNames?.hotTake !== nextConfig.podcastHostNames.hotTake ||
