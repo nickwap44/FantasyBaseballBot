@@ -173,13 +173,19 @@ export function buildDemoPowerRankings(snapshot, timezone) {
   ].join("\n");
 }
 
-export async function buildSocialPost(snapshot, timezone, linkedManagersContext = "") {
+export async function buildSocialPost(
+  snapshot,
+  timezone,
+  linkedManagersContext = "",
+  reporterContextText = ""
+) {
   return generateText({
     systemPrompt:
-      "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team.",
+      "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave a good quote in when it fits.",
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
+      reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
       "Recent transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5)),
       "",
@@ -403,6 +409,24 @@ export async function buildTransactionGrades(
   });
 }
 
+export function formatReporterContext(reporterContext = []) {
+  if (!reporterContext.length) {
+    return "";
+  }
+
+  return reporterContext
+    .map((item) => {
+      return [
+        `- Team: ${item.teamName}`,
+        `Manager: ${item.manager}`,
+        `Prompt: ${item.prompt}`,
+        `Reply: ${item.response}`,
+        `Feature tags: ${item.features.join(", ")}`
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
 export function buildDemoTransactionGrades(snapshot, timezone) {
   return [
     `**Instant Waiver and Trade Grades Demo**`,
@@ -440,7 +464,8 @@ export async function buildPodcastPackage(
   timezone,
   renderer = config.podcastRenderer,
   hostNames = {},
-  linkedManagersContext = ""
+  linkedManagersContext = "",
+  reporterContextText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
@@ -448,7 +473,8 @@ export async function buildPodcastPackage(
       "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
     userPrompt: [
       buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
-      linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : ""
+      linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
+      reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : ""
     ].filter(Boolean).join("\n\n"),
     temperature: 1
   });

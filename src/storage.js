@@ -7,6 +7,7 @@ const guildConfigPath = path.join(dataDir, "guild-config.json");
 const reminderStatePath = path.join(dataDir, "reminder-state.json");
 const fantasyStatePath = path.join(dataDir, "fantasy-state.json");
 const mediaRegistryPath = path.join(dataDir, "media-registry.json");
+const reporterStatePath = path.join(dataDir, "reporter-state.json");
 
 async function ensureDataDir() {
   await mkdir(dataDir, { recursive: true });
@@ -103,4 +104,13 @@ export async function getMediaRegistry() {
 export async function saveMediaRegistry(nextRegistry) {
   await writeState("media-registry", mediaRegistryPath, nextRegistry);
   return nextRegistry;
+}
+
+export async function getReporterState() {
+  return readState("reporter-state", reporterStatePath, {});
+}
+
+export async function saveReporterState(nextState) {
+  await writeState("reporter-state", reporterStatePath, nextState);
+  return nextState;
 }

@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import { config as appConfig } from "./config.js";
 import { getDatabaseHealth } from "./database.js";
-import { getGuildConfig, saveGuildConfig } from "./storage.js";
+import { getGuildConfig, getReporterState, saveGuildConfig, saveReporterState } from "./storage.js";
 import { getLeagueSnapshot } from "./espnApi.js";
 import { handleFantasyTest } from "./fantasyService.js";
 
@@ -199,6 +199,51 @@ export const commandDefinitions = [
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
+    .setName("reporter-ask")
+    .setDescription("Open a request for comment for a linked manager.")
+    .addStringOption((option) =>
+      option
+        .setName("espn")
+        .setDescription("ESPN team id, team name, or manager name.")
+        .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("feature")
+        .setDescription("Where this quote should be used.")
+        .setRequired(true)
+        .addChoices(
+          { name: "social", value: "social" },
+          { name: "podcast", value: "podcast" },
+          { name: "both", value: "both" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("question")
+        .setDescription("The request for comment.")
+        .setRequired(true)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("reporter-respond")
+    .setDescription("Respond to an open request for comment.")
+    .addIntegerOption((option) =>
+      option
+        .setName("inquiry_id")
+        .setDescription("The inquiry number.")
+        .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("response")
+        .setDescription("Your response for the reporter.")
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("reporter-status")
+    .setDescription("Show recent reporter inquiries and responses."),
+  new SlashCommandBuilder()
     .setName("fantasy-test")
     .setDescription("Run a live test against ESPN or generate a sample content post.")
     .addStringOption((option) =>
@@ -264,6 +309,13 @@ function findEspnTeam(snapshot, query) {
       team.abbrev
     ].some((candidate) => normalizeEspnLookup(candidate) === normalizedQuery);
   }) || null;
+}
+
+function getReporterStateForGuild(reporterState, guildId) {
+  return reporterState[guildId] || {
+    nextInquiryId: 1,
+    inquiries: []
+  };
 }
 
 export async function handleCommand(interaction) {
@@ -380,6 +432,8 @@ export async function handleCommand(interaction) {
 
   if (interaction.commandName === "fantasy-status") {
     let databaseLine = "Database: not configured";
+    const reporterState = await getReporterState();
+    const guildReporterState = getReporterStateForGuild(reporterState, guildId);
 
     try {
       const dbHealth = await getDatabaseHealth();
@@ -403,7 +457,8 @@ export async function handleCommand(interaction) {
         `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`,
         `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
         `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
-        `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`
+        `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`,
+        `Reporter inquiries: ${guildReporterState.inquiries.length}`
       ].join("\n"),
       ephemeral: true
     });
@@ -592,6 +647,123 @@ export async function handleCommand(interaction) {
     await saveGuildConfig(guildId, guildConfig);
     await interaction.reply({
       content: `Linked ${matchedTeam.name} (${matchedTeam.manager}) to ${userMention(user.id)}.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "reporter-ask") {
+    const snapshot = await getLeagueSnapshot();
+    const espnQuery = interaction.options.getString("espn", true);
+    const matchedTeam = findEspnTeam(snapshot, espnQuery);
+    if (!matchedTeam) {
+      await interaction.reply({
+        content: "I couldn't find that ESPN team or manager. Use `/espn-link action:list-teams` first if needed.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const links = getCurrentEspnLinks(guildConfig);
+    const link = links[String(matchedTeam.id)];
+    if (!link) {
+      await interaction.reply({
+        content: `No Discord user is linked to ${matchedTeam.name} (${matchedTeam.manager}) yet.`,
+        ephemeral: true
+      });
+      return;
+    }
+
+    const reporterState = await getReporterState();
+    const guildReporterState = getReporterStateForGuild(reporterState, guildId);
+    const rawFeature = interaction.options.getString("feature", true);
+    const features = rawFeature === "both" ? ["social", "podcast"] : [rawFeature];
+    const inquiry = {
+      id: guildReporterState.nextInquiryId,
+      teamId: matchedTeam.id,
+      teamName: matchedTeam.name,
+      manager: matchedTeam.manager,
+      discordUserId: link.discordUserId,
+      prompt: interaction.options.getString("question", true),
+      features,
+      status: "open",
+      askedAt: new Date().toISOString(),
+      askedByUserId: interaction.user.id,
+      response: "",
+      respondedAt: null,
+      respondedByUserId: null
+    };
+
+    reporterState[guildId] = {
+      nextInquiryId: guildReporterState.nextInquiryId + 1,
+      inquiries: [inquiry, ...guildReporterState.inquiries].slice(0, 50)
+    };
+    await saveReporterState(reporterState);
+
+    await interaction.reply({
+      content: [
+        `Request for comment #${inquiry.id} opened for ${matchedTeam.name} (${matchedTeam.manager}).`,
+        `${userMention(link.discordUserId)} reporter request: ${inquiry.prompt}`,
+        `Reply with \`/reporter-respond inquiry_id:${inquiry.id} response:...\``,
+        `This quote will feed: ${features.join(", ")}`
+      ].join("\n"),
+      allowedMentions: { users: [link.discordUserId] }
+    });
+    return;
+  }
+
+  if (interaction.commandName === "reporter-respond") {
+    const inquiryId = interaction.options.getInteger("inquiry_id", true);
+    const response = interaction.options.getString("response", true).trim();
+    const reporterState = await getReporterState();
+    const guildReporterState = getReporterStateForGuild(reporterState, guildId);
+    const inquiry = guildReporterState.inquiries.find((item) => item.id === inquiryId);
+
+    if (!inquiry) {
+      await interaction.reply({
+        content: `I couldn't find reporter inquiry #${inquiryId}.`,
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (inquiry.discordUserId !== interaction.user.id) {
+      await interaction.reply({
+        content: "You are not the linked manager for this request for comment.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    inquiry.status = "responded";
+    inquiry.response = response.slice(0, 1000);
+    inquiry.respondedAt = new Date().toISOString();
+    inquiry.respondedByUserId = interaction.user.id;
+    reporterState[guildId] = guildReporterState;
+    await saveReporterState(reporterState);
+
+    await interaction.reply({
+      content: `Response saved for inquiry #${inquiry.id}. The reporter can now use it in social posts and the podcast.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "reporter-status") {
+    const reporterState = await getReporterState();
+    const guildReporterState = getReporterStateForGuild(reporterState, guildId);
+    const lines = guildReporterState.inquiries.slice(0, 8).map((inquiry) => {
+      return [
+        `#${inquiry.id} ${inquiry.teamName} (${inquiry.manager})`,
+        `Status: ${inquiry.status}`,
+        `Features: ${inquiry.features.join(", ")}`,
+        `Prompt: ${inquiry.prompt}`,
+        inquiry.response ? `Response: ${inquiry.response}` : "Response: awaiting comment"
+      ].join("\n");
+    });
+
+    await interaction.reply({
+      content: lines.length > 0 ? lines.join("\n\n") : "No reporter inquiries yet.",
       ephemeral: true
     });
     return;

@@ -3,8 +3,10 @@ import {
   getGuildConfigs,
   getFantasyState,
   getMediaRegistry,
+  getReporterState,
   saveFantasyState,
-  saveMediaRegistry
+  saveMediaRegistry,
+  saveReporterState
 } from "./storage.js";
 import { getLeagueSnapshot, testEspnConnection } from "./espnApi.js";
 import {
@@ -18,7 +20,8 @@ import {
   buildRegistryUpdate,
   buildSocialPost,
   buildTransactionGrades,
-  buildTransactionsSummary
+  buildTransactionsSummary,
+  formatReporterContext
 } from "./fantasyContent.js";
 import { config } from "./config.js";
 import { savePodcastEpisode } from "./database.js";
@@ -192,6 +195,28 @@ function appendMentionFooter(content, footer) {
   return [content.trim(), "", footer].filter(Boolean).join("\n");
 }
 
+function getReporterStateForGuild(reporterState, guildId) {
+  return reporterState[guildId] || {
+    nextInquiryId: 1,
+    inquiries: []
+  };
+}
+
+function getReporterQuotesForFeature(reporterState, guildId, feature) {
+  const state = getReporterStateForGuild(reporterState, guildId);
+  return state.inquiries
+    .filter((inquiry) => inquiry.status === "responded")
+    .filter((inquiry) => inquiry.features.includes(feature))
+    .slice(-5)
+    .map((inquiry) => ({
+      teamName: inquiry.teamName,
+      manager: inquiry.manager,
+      prompt: inquiry.prompt,
+      response: inquiry.response,
+      features: inquiry.features
+    }));
+}
+
 function parseRegistrySections(text) {
   const sections = {
     runningJokes: "",
@@ -291,10 +316,14 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
 
   if (feature === "social") {
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "social")
+    );
     const content = await buildSocialPost(
       snapshot,
       guildConfig.timezone,
-      linkedManagersContext
+      linkedManagersContext,
+      reporterContextText
     );
     await channel.send(appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "social")));
     return state;
@@ -303,6 +332,9 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   if (feature === "podcast") {
     const hostNames = guildConfig.podcastHostNames || {};
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
+    );
     const previousMemory = [
       state.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
       formatRegistryForPrompt(registry),
@@ -320,7 +352,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       guildConfig.timezone,
       renderer,
       hostNames,
-      linkedManagersContext
+      linkedManagersContext,
+      reporterContextText
     );
     await channel.send({
       content: [
@@ -358,6 +391,7 @@ export async function runFantasyJobs(client, logger = console) {
   const snapshot = await getLeagueSnapshot();
   const fantasyState = await getFantasyState();
   const mediaRegistry = await getMediaRegistry();
+  const reporterState = await getReporterState();
   const nextState = { ...fantasyState };
   const nextRegistry = { ...mediaRegistry };
 
@@ -425,6 +459,7 @@ export async function runFantasyJobs(client, logger = console) {
 
   await saveFantasyState(nextState);
   await saveMediaRegistry(nextRegistry);
+  await saveReporterState(reporterState);
 }
 
 export function startFantasyLoop(client, intervalMs) {
@@ -516,12 +551,16 @@ export async function handleFantasyTest(testType, guildId, client) {
 
   if (normalizedType === "social") {
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "social")
+    );
     const content = testType.startsWith("demo-")
       ? buildDemoSocialPost(snapshot, timezone)
       : await buildSocialPost(
           snapshot,
           timezone,
-          linkedManagersContext
+          linkedManagersContext,
+          reporterContextText
         );
     const finalContent = appendMentionFooter(
       content,
@@ -538,6 +577,9 @@ export async function handleFantasyTest(testType, guildId, client) {
   if (normalizedType === "podcast") {
     const hostNames = guildConfig?.podcastHostNames || {};
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
+    );
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -561,7 +603,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           timezone,
           renderer,
           hostNames,
-          linkedManagersContext
+          linkedManagersContext,
+          reporterContextText
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
