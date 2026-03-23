@@ -4,6 +4,7 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 import { config as appConfig } from "./config.js";
+import { getDatabaseHealth } from "./database.js";
 import { getGuildConfig, saveGuildConfig } from "./storage.js";
 import { handleFantasyTest } from "./fantasyService.js";
 
@@ -255,10 +256,24 @@ export async function handleCommand(interaction) {
   }
 
   if (interaction.commandName === "fantasy-status") {
+    let databaseLine = "Database: not configured";
+
+    try {
+      const dbHealth = await getDatabaseHealth();
+      if (dbHealth.configured && dbHealth.connected) {
+        databaseLine = `Database: connected (app_state rows: ${dbHealth.appStateEntries}, podcast episodes: ${dbHealth.podcastEpisodes})`;
+      } else if (dbHealth.configured) {
+        databaseLine = "Database: configured, but connection failed";
+      }
+    } catch (error) {
+      databaseLine = `Database: error (${error.message || "unknown"})`;
+    }
+
     await interaction.reply({
       content: [
         `ESPN league ID configured: ${appConfig.espnLeagueId ? "yes" : "no"}`,
         `OpenAI key configured: ${appConfig.openAiApiKey ? "yes" : "no"}`,
+        databaseLine,
         `Transactions channel: ${guildConfig.transactionsChannelId ? `<#${guildConfig.transactionsChannelId}>` : "not set"}`,
         `Power rankings channel: ${guildConfig.powerRankingsChannelId ? `<#${guildConfig.powerRankingsChannelId}>` : "not set"}`,
         `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,

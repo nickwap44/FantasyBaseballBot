@@ -57,6 +57,31 @@ export async function initializeDatabase() {
   return true;
 }
 
+export async function getDatabaseHealth() {
+  const currentPool = getPool();
+  if (!currentPool) {
+    return {
+      configured: false,
+      connected: false,
+      appStateEntries: 0,
+      podcastEpisodes: 0
+    };
+  }
+
+  await initializeDatabase();
+
+  const ping = await currentPool.query("SELECT 1");
+  const appStateCount = await currentPool.query("SELECT COUNT(*)::int AS count FROM app_state");
+  const podcastCount = await currentPool.query("SELECT COUNT(*)::int AS count FROM podcast_episodes");
+
+  return {
+    configured: true,
+    connected: ping.rowCount === 1,
+    appStateEntries: appStateCount.rows[0]?.count ?? 0,
+    podcastEpisodes: podcastCount.rows[0]?.count ?? 0
+  };
+}
+
 export async function loadAppState(key) {
   const currentPool = getPool();
   if (!currentPool) {
