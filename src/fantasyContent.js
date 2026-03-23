@@ -59,6 +59,17 @@ function matchupBlock(matchups) {
     .join("\n");
 }
 
+function isSeasonPreviewMode(snapshot) {
+  const hasRecordedStandings = snapshot.teams.some(
+    (team) => (team.wins || 0) > 0 || (team.losses || 0) > 0 || (team.ties || 0) > 0
+  );
+  const hasScoredMatchups = snapshot.matchups.some(
+    (matchup) => (matchup.homeScore || 0) > 0 || (matchup.awayScore || 0) > 0
+  );
+
+  return !hasRecordedStandings && !hasScoredMatchups;
+}
+
 const PODCAST_TITLE = "The Backyard Bullpen";
 const PODCAST_SUBTITLE = "The official podcast of the Backyard Baseball Association";
 const PODCAST_SEGMENTS = [
@@ -207,13 +218,16 @@ export function buildDemoSocialPost(snapshot, timezone) {
 
 function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
   const resolvedHostNames = resolveHostNames(hostNames);
+  const seasonPreviewMode = isSeasonPreviewMode(snapshot);
   return [
     "Write a fantasy baseball podcast transcript for three hosts.",
     `Host 1: ${resolvedHostNames.lead}, the straight man and lead host. He runs the show and introduces segments.`,
     `Host 2: ${resolvedHostNames.hotTake}, the hot take artist who overreacts and flies off the handle.`,
     `Host 3: ${resolvedHostNames.analyst}, the steady analyst who grounds everything in evidence.`,
     "Keep the total transcript in the 5-10 minute range, roughly 700-1200 words.",
-    "Include a cold open, one standings segment, one matchup/results segment, one transactions/news segment, and one closing prediction segment.",
+    seasonPreviewMode
+      ? "This is a season preview episode because meaningful games have not started yet. Include a cold open, one contender/pretender segment, one draft and roster-construction segment, one rivalry or league-drama segment, and one bold-predictions closing segment."
+      : "Include a cold open, one standings segment, one matchup/results segment, one transactions/news segment, and one closing prediction segment.",
     "The hosts should sound like long-time friends and recurring co-hosts who know each other's rhythms.",
     "They should tease each other, laugh, interrupt lightly, and keep a few running jokes alive across episodes.",
     "Use the memory block as canon for inside jokes, unresolved debates, and recurring bits.",
@@ -235,7 +249,7 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     "Standings:",
     standingsBlock(snapshot.teams),
     "",
-    "Current matchups/results:",
+    seasonPreviewMode ? "Scheduled matchups / early slate context:" : "Current matchups/results:",
     matchupBlock(snapshot.matchups),
     "",
     "Recent transactions:",
@@ -472,7 +486,7 @@ export async function buildPodcastPackage(
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft, focus on draft hype, projected contenders, and personality-driven banter. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
     userPrompt: [
       buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
