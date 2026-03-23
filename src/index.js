@@ -1,13 +1,17 @@
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
 import { ensureBootstrapGuildConfig } from "./bootstrapConfig.js";
 import { handleCommand } from "./commands.js";
 import { config } from "./config.js";
 import { initializeDatabase, isDatabaseConfigured } from "./database.js";
-import { startFantasyLoop } from "./fantasyService.js";
+import { handleFantasyReactionAdd, startFantasyLoop } from "./fantasyService.js";
 import { startReminderLoop } from "./reminderService.js";
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessageReactions
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 let reminderInterval;
@@ -48,6 +52,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     await interaction.reply(payload);
+  }
+});
+
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  try {
+    await handleFantasyReactionAdd(reaction, user, client);
+  } catch (error) {
+    console.error("Fantasy reaction handler failed:", error);
   }
 });
 

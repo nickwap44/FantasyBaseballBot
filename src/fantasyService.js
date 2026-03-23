@@ -15,6 +15,7 @@ import {
   buildDemoSocialPost,
   buildDemoTransactionGrades,
   buildDemoTransactionsSummary,
+  buildEmergencyPodcastPackage,
   buildPodcastPackage,
   buildPowerRankings,
   buildRegistryUpdate,
@@ -193,6 +194,172 @@ function appendMentionFooter(content, footer) {
   }
 
   return [content.trim(), "", footer].filter(Boolean).join("\n");
+}
+
+const EMERGENCY_REACTION_THRESHOLD = 5;
+const EMERGENCY_UNIQUE_USER_THRESHOLD = 3;
+const EMERGENCY_ELIGIBILITY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function listEmergencyCandidates(state) {
+  return state.reactionEligibleTransactionPosts || [];
+}
+
+function pruneEmergencyCandidates(state, now = Date.now()) {
+  const eligiblePosts = listEmergencyCandidates(state).filter((entry) => {
+    const createdAt = new Date(entry.createdAt).getTime();
+    return Number.isFinite(createdAt) && now - createdAt <= EMERGENCY_ELIGIBILITY_WINDOW_MS;
+  });
+
+  return {
+    ...state,
+    reactionEligibleTransactionPosts: eligiblePosts
+  };
+}
+
+function pickEmergencyFocusTransaction(snapshot) {
+  const transactions = snapshot.transactions || [];
+  const trade = transactions.find((transaction) => transaction.type?.includes("TRADE"));
+  if (trade) {
+    return trade;
+  }
+
+  const waiverClaim = [...transactions]
+    .filter((transaction) => Number.isFinite(transaction.biddingAmount) && transaction.biddingAmount > 0)
+    .sort((left, right) => (right.biddingAmount || 0) - (left.biddingAmount || 0))[0];
+
+  return waiverClaim || transactions[0] || null;
+}
+
+function registerReactionEligibleTransactionPost(state, message, focusTransaction) {
+  if (!focusTransaction) {
+    return pruneEmergencyCandidates(state);
+  }
+
+  const nextPosts = [
+    ...listEmergencyCandidates(state).filter((entry) => entry.messageId !== message.id),
+    {
+      messageId: message.id,
+      channelId: message.channelId,
+      createdAt: new Date().toISOString(),
+      triggeredAt: null,
+      focusTransaction
+    }
+  ].slice(-8);
+
+  return pruneEmergencyCandidates({
+    ...state,
+    reactionEligibleTransactionPosts: nextPosts
+  });
+}
+
+async function getReactionMetrics(message) {
+  let totalReactions = 0;
+  const uniqueUsers = new Set();
+
+  for (const reaction of message.reactions.cache.values()) {
+    const users = await reaction.users.fetch();
+    for (const [, user] of users) {
+      if (user.bot) {
+        continue;
+      }
+
+      totalReactions += 1;
+      uniqueUsers.add(user.id);
+    }
+  }
+
+  return {
+    totalReactions,
+    uniqueUserCount: uniqueUsers.size
+  };
+}
+
+async function triggerEmergencyPodcast(
+  client,
+  guildId,
+  guildConfig,
+  guildState,
+  snapshot,
+  messageId,
+  logger = console
+) {
+  const candidates = listEmergencyCandidates(guildState);
+  if (candidates.length === 0) {
+    return guildState;
+  }
+
+  const latestCandidate = candidates.find((entry) => entry.messageId === messageId);
+
+  if (!latestCandidate || latestCandidate.triggeredAt || !latestCandidate.focusTransaction) {
+    return guildState;
+  }
+
+  const podcastChannelId = guildConfig.podcastChannelId;
+  if (!podcastChannelId) {
+    return guildState;
+  }
+
+  const channel = await client.channels.fetch(podcastChannelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    return guildState;
+  }
+
+  const renderer =
+    config.featureRealtimePodcast && config.podcastRenderer === "realtime"
+      ? "realtime"
+      : "tts";
+  const hostNames = guildConfig.podcastHostNames || {};
+  const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
+  const reporterContextText = formatReporterContext(
+    getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
+  );
+  const previousMemory = [
+    guildState.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
+    guildConfig.podcastManualContext?.trim()
+      ? `Producer notes and manual context:\n${guildConfig.podcastManualContext.trim()}`
+      : ""
+  ].filter(Boolean).join("\n\n");
+  const podcast = await buildEmergencyPodcastPackage(
+    snapshot,
+    latestCandidate.focusTransaction,
+    previousMemory,
+    guildConfig.timezone,
+    renderer,
+    hostNames,
+    linkedManagersContext,
+    reporterContextText
+  );
+
+  await channel.send({
+    content: [
+      "Emergency Bullpen is live.",
+      `Triggered by community reaction to today's transactions post. Renderer: ${renderer}.`,
+      "",
+      podcast.summary
+    ].join("\n"),
+    files: [podcast.audioAttachment, podcast.transcriptAttachment]
+  });
+
+  await savePodcastEpisode({
+    guildId,
+    episodeKind: "emergency",
+    renderer,
+    title: "Emergency Bullpen",
+    summary: podcast.summary,
+    memory: podcast.memory,
+    transcript: podcast.transcript
+  });
+
+  return {
+    ...guildState,
+    reactionEligibleTransactionPosts: candidates.map((entry) =>
+      entry.messageId === latestCandidate.messageId
+        ? { ...entry, triggeredAt: new Date().toISOString() }
+        : entry
+    ),
+    podcastHistory: [...(guildState.podcastHistory || []), podcast.summary].slice(-6),
+    podcastMemoryHistory: [...(guildState.podcastMemoryHistory || []), podcast.memory].slice(-8)
+  };
 }
 
 function getReporterStateForGuild(reporterState, guildId) {
@@ -542,10 +709,14 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       linkedManagersContext,
       reporterContextText
     );
-    await channel.send(
+    const sentMessage = await channel.send(
       appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "transactions"))
     );
-    return state;
+    return registerReactionEligibleTransactionPost(
+      state,
+      sentMessage,
+      pickEmergencyFocusTransaction(snapshot)
+    );
   }
 
   if (feature === "power") {
@@ -641,7 +812,7 @@ export async function runFantasyJobs(client, logger = console) {
 
   for (const [guildId, guildConfig] of Object.entries(guildConfigs)) {
     const timezone = guildConfig.timezone || "America/Los_Angeles";
-    nextState[guildId] = nextState[guildId] || {};
+    nextState[guildId] = pruneEmergencyCandidates(nextState[guildId] || {});
     nextRegistry[guildId] = nextRegistry[guildId] || {
       runningJokes: "",
       hostBiases: "",
@@ -716,6 +887,101 @@ export function startFantasyLoop(client, intervalMs) {
       console.error("Scheduled fantasy job check failed:", error);
     });
   }, intervalMs);
+}
+
+export async function handleFantasyReactionAdd(reaction, user, client, logger = console) {
+  if (user?.bot) {
+    return;
+  }
+
+  if (reaction.partial) {
+    await reaction.fetch().catch(() => null);
+  }
+
+  if (reaction.message?.partial) {
+    await reaction.message.fetch().catch(() => null);
+  }
+
+  const message = reaction.message;
+  const guildId = message?.guildId;
+  if (!message || !guildId) {
+    return;
+  }
+
+  const fantasyState = await getFantasyState();
+  const guildState = pruneEmergencyCandidates(fantasyState[guildId] || {});
+  const candidate = listEmergencyCandidates(guildState).find((entry) => entry.messageId === message.id);
+  if (!candidate || candidate.triggeredAt) {
+    if (fantasyState[guildId] !== guildState) {
+      await saveFantasyState({
+        ...fantasyState,
+        [guildId]: guildState
+      });
+    }
+    return;
+  }
+
+  const candidateCreatedAt = new Date(candidate.createdAt).getTime();
+  if (!Number.isFinite(candidateCreatedAt) || Date.now() - candidateCreatedAt > EMERGENCY_ELIGIBILITY_WINDOW_MS) {
+    await saveFantasyState({
+      ...fantasyState,
+      [guildId]: guildState
+    });
+    return;
+  }
+
+  const { totalReactions, uniqueUserCount } = await getReactionMetrics(message);
+  if (
+    totalReactions < EMERGENCY_REACTION_THRESHOLD ||
+    uniqueUserCount < EMERGENCY_UNIQUE_USER_THRESHOLD
+  ) {
+    if (fantasyState[guildId] !== guildState) {
+      await saveFantasyState({
+        ...fantasyState,
+        [guildId]: guildState
+      });
+    }
+    return;
+  }
+
+  const lockedGuildState = {
+    ...guildState,
+    reactionEligibleTransactionPosts: listEmergencyCandidates(guildState).map((entry) =>
+      entry.messageId === candidate.messageId
+        ? { ...entry, triggeredAt: new Date().toISOString() }
+        : entry
+    )
+  };
+  const lockedState = {
+    ...fantasyState,
+    [guildId]: lockedGuildState
+  };
+  await saveFantasyState(lockedState);
+
+  try {
+    const guildConfig = await getGuildConfig(guildId);
+    if (!guildConfig) {
+      return;
+    }
+
+    const snapshot = await getLeagueSnapshot();
+    const finalGuildState = await triggerEmergencyPodcast(
+      client,
+      guildId,
+      guildConfig,
+      lockedGuildState,
+      snapshot,
+      candidate.messageId,
+      logger
+    );
+
+    await saveFantasyState({
+      ...lockedState,
+      [guildId]: finalGuildState
+    });
+  } catch (error) {
+    logger.error(`Emergency podcast trigger failed for guild ${guildId}:`, error);
+  }
 }
 
 export async function handleFantasyTest(testType, guildId, client) {

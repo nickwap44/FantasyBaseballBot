@@ -497,6 +497,21 @@ function getTopicLabelForLine(text, seasonPreviewMode) {
 }
 
 function buildPodcastTopicGuide(transcript, snapshot, hostNames = {}) {
+  return buildPodcastTopicGuideWithMetadata(transcript, snapshot, hostNames, {
+    title: PODCAST_TITLE,
+    subtitle: PODCAST_SUBTITLE
+  });
+}
+
+function buildPodcastTopicGuideWithMetadata(
+  transcript,
+  snapshot,
+  hostNames = {},
+  {
+    title = PODCAST_TITLE,
+    subtitle = PODCAST_SUBTITLE
+  } = {}
+) {
   const lines = parseTranscriptLines(transcript, hostNames);
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
   const topics = [];
@@ -543,8 +558,8 @@ function buildPodcastTopicGuide(transcript, snapshot, hostNames = {}) {
     .slice(0, 6);
 
   return [
-    `**${PODCAST_TITLE}**`,
-    PODCAST_SUBTITLE,
+    `**${title}**`,
+    subtitle,
     "",
     "**Topics**",
     ...sortedTopics.map((topic) => `${topic.timestamp} - ${topic.label}`)
@@ -730,13 +745,60 @@ export async function buildPodcastPackage(
 
   return {
     transcript,
-    summary: `**${PODCAST_TITLE}**\n${PODCAST_SUBTITLE}\n\n${summary}`,
+    summary,
     memory,
     audioAttachment: new AttachmentBuilder(mp3Buffer, {
       name: `fantasy-podcast-week-${snapshot.currentScoringPeriod}.mp3`
     }),
     transcriptAttachment: new AttachmentBuilder(transcriptBuffer, {
       name: `fantasy-podcast-week-${snapshot.currentScoringPeriod}.txt`
+    })
+  };
+}
+
+export async function buildEmergencyPodcastPackage(
+  snapshot,
+  focusTransaction,
+  podcastHistory,
+  timezone,
+  renderer = config.podcastRenderer,
+  hostNames = {},
+  linkedManagersContext = "",
+  reporterContextText = ""
+) {
+  const resolvedHostNames = resolveHostNames(hostNames);
+  const transcript = await generateText({
+    systemPrompt:
+      "You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+    userPrompt: [
+      `Write an emergency mini-episode for ${formatDateTime(new Date(), timezone)}.`,
+      `Focus event: ${focusTransaction.teamName} made a ${focusTransaction.type}${focusTransaction.biddingAmount ? ` for $${focusTransaction.biddingAmount}` : ""}.`,
+      `Players involved: ${focusTransaction.players.map((player) => `${player.type} ${player.name}`).join(", ") || "No named players provided."}`,
+      "This is triggered by league reaction in Discord, so the hosts should treat it like a breaking-news segment.",
+      `Hosts: ${resolvedHostNames.lead} (lead), ${resolvedHostNames.hotTake} (hot take), ${resolvedHostNames.analyst} (analyst).`,
+      "Include a quick cold open, one breaking-news exchange, one argument about impact, and a short sign-off.",
+      podcastHistory ? `Recent show memory:\n${podcastHistory}` : "",
+      linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
+      reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : ""
+    ].filter(Boolean).join("\n\n"),
+    temperature: 1
+  });
+
+  const memory = await buildPodcastMemory(transcript);
+  const mp3Buffer = await buildPodcastPackageAudio(transcript, renderer, resolvedHostNames);
+
+  return {
+    transcript,
+    summary: buildPodcastTopicGuideWithMetadata(transcript, snapshot, resolvedHostNames, {
+      title: "Emergency Bullpen",
+      subtitle: "Breaking news from the Backyard Baseball Association"
+    }),
+    memory,
+    audioAttachment: new AttachmentBuilder(mp3Buffer, {
+      name: `emergency-bullpen-${focusTransaction.id}.mp3`
+    }),
+    transcriptAttachment: new AttachmentBuilder(Buffer.from(transcript, "utf8"), {
+      name: `emergency-bullpen-${focusTransaction.id}.txt`
     })
   };
 }
@@ -783,7 +845,7 @@ export async function buildDemoPodcastPackage(
 
   return {
     transcript,
-    summary: `**${PODCAST_TITLE}**\n${PODCAST_SUBTITLE}\n\n${summary}`,
+    summary,
     memory,
     audioAttachment: new AttachmentBuilder(await buildPodcastPackageAudio(transcript, renderer, resolvedHostNames), {
       name: `fantasy-podcast-demo-week-${snapshot.currentScoringPeriod}.mp3`
