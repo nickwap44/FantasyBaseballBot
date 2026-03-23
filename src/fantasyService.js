@@ -87,6 +87,10 @@ function getStateKey(feature, timezone, now) {
   return `${feature}:${timezone}:${getDateInTimezone(now, timezone)}`;
 }
 
+function getLatestTransactionId(snapshot) {
+  return snapshot.transactions?.length > 0 ? String(snapshot.transactions[0].id) : null;
+}
+
 function formatRegistryForPrompt(registry) {
   if (!registry) {
     return "";
@@ -142,6 +146,32 @@ async function maybeSendInstantTransactionGrades(client, guildId, guildConfig, s
   return {
     ...state,
     lastGradedTransactionId: latestTransactionId
+  };
+}
+
+async function maybeRefreshMediaRegistry(snapshot, timezone, now, state, registry) {
+  const latestTransactionId = getLatestTransactionId(snapshot);
+  const registryRunKey = getStateKey("media-registry", timezone, now);
+  const shouldRefreshDaily = !state[registryRunKey];
+  const shouldRefreshForNewTransaction =
+    latestTransactionId && state.lastRegistryTransactionId !== latestTransactionId;
+
+  if (!shouldRefreshDaily && !shouldRefreshForNewTransaction) {
+    return { state, registry };
+  }
+
+  const updatedRegistryText = await buildRegistryUpdate(
+    snapshot,
+    formatRegistryForPrompt(registry)
+  );
+
+  return {
+    state: {
+      ...state,
+      [registryRunKey]: new Date().toISOString(),
+      lastRegistryTransactionId: latestTransactionId || state.lastRegistryTransactionId || null
+    },
+    registry: parseRegistrySections(updatedRegistryText)
   };
 }
 
@@ -246,11 +276,15 @@ export async function runFantasyJobs(client, logger = console) {
         nextRegistry[guildId]
       );
 
-      const updatedRegistryText = await buildRegistryUpdate(
+      const registryRefresh = await maybeRefreshMediaRegistry(
         snapshot,
-        formatRegistryForPrompt(nextRegistry[guildId])
+        timezone,
+        now,
+        nextState[guildId],
+        nextRegistry[guildId]
       );
-      nextRegistry[guildId] = parseRegistrySections(updatedRegistryText);
+      nextState[guildId] = registryRefresh.state;
+      nextRegistry[guildId] = registryRefresh.registry;
     } catch (error) {
       logger.error(`Fantasy registry/transaction grade update failed for guild ${guildId}:`, error);
     }
