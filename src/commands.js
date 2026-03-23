@@ -1,11 +1,13 @@
 import {
   ChannelType,
   PermissionFlagsBits,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  userMention
 } from "discord.js";
 import { config as appConfig } from "./config.js";
 import { getDatabaseHealth } from "./database.js";
 import { getGuildConfig, saveGuildConfig } from "./storage.js";
+import { getLeagueSnapshot } from "./espnApi.js";
 import { handleFantasyTest } from "./fantasyService.js";
 
 function getDefaultGuildConfig() {
@@ -24,7 +26,8 @@ function getDefaultGuildConfig() {
       lead: "Mason",
       hotTake: "Rico",
       analyst: "Elena"
-    }
+    },
+    espnDiscordLinks: {}
   };
 }
 
@@ -168,6 +171,34 @@ export const commandDefinitions = [
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
+    .setName("espn-link")
+    .setDescription("Link an ESPN manager or team to a Discord user.")
+    .addStringOption((option) =>
+      option
+        .setName("action")
+        .setDescription("What you want to do.")
+        .setRequired(true)
+        .addChoices(
+          { name: "set", value: "set" },
+          { name: "show", value: "show" },
+          { name: "clear", value: "clear" },
+          { name: "list-teams", value: "list-teams" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("espn")
+        .setDescription("ESPN team id, team name, or manager name.")
+        .setRequired(false)
+    )
+    .addUserOption((option) =>
+      option
+        .setName("user")
+        .setDescription("The Discord user to link.")
+        .setRequired(false)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
     .setName("fantasy-test")
     .setDescription("Run a live test against ESPN or generate a sample content post.")
     .addStringOption((option) =>
@@ -201,6 +232,38 @@ function isValidTimezone(timezone) {
   } catch {
     return false;
   }
+}
+
+function getCurrentHostNames(guildConfig) {
+  return {
+    lead: guildConfig.podcastHostNames?.lead || "Mason",
+    hotTake: guildConfig.podcastHostNames?.hotTake || "Rico",
+    analyst: guildConfig.podcastHostNames?.analyst || "Elena"
+  };
+}
+
+function getCurrentEspnLinks(guildConfig) {
+  return guildConfig.espnDiscordLinks || {};
+}
+
+function normalizeEspnLookup(value) {
+  return value?.trim().toLowerCase() || "";
+}
+
+function findEspnTeam(snapshot, query) {
+  const normalizedQuery = normalizeEspnLookup(query);
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  return snapshot.teams.find((team) => {
+    return [
+      String(team.id),
+      team.name,
+      team.manager,
+      team.abbrev
+    ].some((candidate) => normalizeEspnLookup(candidate) === normalizedQuery);
+  }) || null;
 }
 
 export async function handleCommand(interaction) {
@@ -339,7 +402,8 @@ export async function handleCommand(interaction) {
         `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,
         `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`,
         `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
-        `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`
+        `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
+        `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`
       ].join("\n"),
       ephemeral: true
     });
@@ -394,11 +458,7 @@ export async function handleCommand(interaction) {
 
   if (interaction.commandName === "podcast-host") {
     const action = interaction.options.getString("action", true);
-    const currentHostNames = {
-      lead: guildConfig.podcastHostNames?.lead || "Mason",
-      hotTake: guildConfig.podcastHostNames?.hotTake || "Rico",
-      analyst: guildConfig.podcastHostNames?.analyst || "Elena"
-    };
+    const currentHostNames = getCurrentHostNames(guildConfig);
 
     if (action === "show") {
       await interaction.reply({
@@ -443,6 +503,95 @@ export async function handleCommand(interaction) {
     await saveGuildConfig(guildId, guildConfig);
     await interaction.reply({
       content: `${role} host is now named ${guildConfig.podcastHostNames[role]}.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "espn-link") {
+    const action = interaction.options.getString("action", true);
+
+    if (action === "list-teams") {
+      const snapshot = await getLeagueSnapshot();
+      const lines = snapshot.teams.map(
+        (team) => `- ${team.id}: ${team.name} (${team.manager})`
+      );
+      await interaction.reply({
+        content: lines.length > 0 ? lines.join("\n") : "No ESPN teams found yet.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (action === "show") {
+      const links = getCurrentEspnLinks(guildConfig);
+      const entries = Object.values(links);
+      await interaction.reply({
+        content: entries.length > 0
+          ? entries
+              .map(
+                (link) =>
+                  `- ${link.teamName} (${link.manager}, team ${link.teamId}) -> ${userMention(link.discordUserId)}`
+              )
+              .join("\n")
+          : "No ESPN-to-Discord links are saved yet.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const espnQuery = interaction.options.getString("espn");
+    if (!espnQuery) {
+      await interaction.reply({
+        content: "Please include `espn` with a team id, team name, or manager name.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const snapshot = await getLeagueSnapshot();
+    const matchedTeam = findEspnTeam(snapshot, espnQuery);
+    if (!matchedTeam) {
+      await interaction.reply({
+        content: "I couldn't find that ESPN team or manager. Use `/espn-link action:list-teams` to see the valid options.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (action === "clear") {
+      const links = { ...getCurrentEspnLinks(guildConfig) };
+      delete links[String(matchedTeam.id)];
+      guildConfig.espnDiscordLinks = links;
+      await saveGuildConfig(guildId, guildConfig);
+      await interaction.reply({
+        content: `Removed the Discord link for ${matchedTeam.name} (${matchedTeam.manager}).`,
+        ephemeral: true
+      });
+      return;
+    }
+
+    const user = interaction.options.getUser("user");
+    if (!user) {
+      await interaction.reply({
+        content: "Please include `user` when using `set`.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    guildConfig.espnDiscordLinks = {
+      ...getCurrentEspnLinks(guildConfig),
+      [String(matchedTeam.id)]: {
+        teamId: matchedTeam.id,
+        teamName: matchedTeam.name,
+        manager: matchedTeam.manager,
+        discordUserId: user.id
+      }
+    };
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: `Linked ${matchedTeam.name} (${matchedTeam.manager}) to ${userMention(user.id)}.`,
       ephemeral: true
     });
     return;

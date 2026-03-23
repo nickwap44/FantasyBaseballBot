@@ -22,7 +22,8 @@ export async function ensureBootstrapGuildConfig() {
       lead: existing?.podcastHostNames?.lead || "Mason",
       hotTake: existing?.podcastHostNames?.hotTake || "Rico",
       analyst: existing?.podcastHostNames?.analyst || "Elena"
-    }
+    },
+    espnDiscordLinks: existing?.espnDiscordLinks || {}
   };
 
   if (!nextConfig.channelId) {
@@ -43,7 +44,8 @@ export async function ensureBootstrapGuildConfig() {
     existing.podcastManualContext !== nextConfig.podcastManualContext ||
     existing.podcastHostNames?.lead !== nextConfig.podcastHostNames.lead ||
     existing.podcastHostNames?.hotTake !== nextConfig.podcastHostNames.hotTake ||
-    existing.podcastHostNames?.analyst !== nextConfig.podcastHostNames.analyst;
+    existing.podcastHostNames?.analyst !== nextConfig.podcastHostNames.analyst ||
+    JSON.stringify(existing.espnDiscordLinks || {}) !== JSON.stringify(nextConfig.espnDiscordLinks);
 
   if (changed) {
     await saveGuildConfig(guildId, nextConfig);
