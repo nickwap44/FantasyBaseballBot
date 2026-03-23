@@ -134,6 +134,46 @@ async function getLinkedManagersContext(client, guildId, snapshot, guildConfig) 
   return lines.join("\n");
 }
 
+async function getRecentSocialDiscussion(client, guildConfig, { limit = 25, hours = 168 } = {}) {
+  const channelId = guildConfig.socialChannelId;
+  if (!channelId) {
+    return "";
+  }
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    return "";
+  }
+
+  const cutoff = Date.now() - hours * 60 * 60 * 1000;
+  const messages = await channel.messages.fetch({ limit }).catch(() => null);
+  if (!messages) {
+    return "";
+  }
+
+  const lines = [...messages.values()]
+    .filter((message) => !message.author?.bot)
+    .filter((message) => message.createdTimestamp >= cutoff)
+    .map((message) => {
+      const text = (message.content || "").replace(/\s+/g, " ").trim();
+      if (!text) {
+        return null;
+      }
+
+      const displayName =
+        message.member?.displayName ||
+        message.author?.globalName ||
+        message.author?.username ||
+        "Unknown user";
+      return `- ${displayName}: ${text.slice(0, 220)}`;
+    })
+    .filter(Boolean)
+    .reverse()
+    .slice(-15);
+
+  return lines.join("\n");
+}
+
 function getRelevantTeamIds(snapshot, feature) {
   if (feature === "transactions") {
     return snapshot.transactions.slice(0, 5).map((transaction) => transaction.teamId);
@@ -319,6 +359,10 @@ async function triggerEmergencyPodcast(
       ? `Producer notes and manual context:\n${guildConfig.podcastManualContext.trim()}`
       : ""
   ].filter(Boolean).join("\n\n");
+  const socialDiscussionText = await getRecentSocialDiscussion(client, guildConfig, {
+    limit: 30,
+    hours: 24
+  });
   const podcast = await buildEmergencyPodcastPackage(
     snapshot,
     latestCandidate.focusTransaction,
@@ -327,7 +371,8 @@ async function triggerEmergencyPodcast(
     renderer,
     hostNames,
     linkedManagersContext,
-    reporterContextText
+    reporterContextText,
+    socialDiscussionText
   );
 
   await channel.send({
@@ -757,6 +802,10 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
         ? `Producer notes and manual context:\n${guildConfig.podcastManualContext.trim()}`
         : ""
     ].filter(Boolean).join("\n\n");
+    const socialDiscussionText = await getRecentSocialDiscussion(client, guildConfig, {
+      limit: 40,
+      hours: 168
+    });
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
         ? "realtime"
@@ -768,7 +817,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       renderer,
       hostNames,
       linkedManagersContext,
-      reporterContextText
+      reporterContextText,
+      socialDiscussionText
     );
     await channel.send({
       content: [
@@ -1108,6 +1158,10 @@ export async function handleFantasyTest(testType, guildId, client) {
     const reporterContextText = formatReporterContext(
       getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
     );
+    const socialDiscussionText = await getRecentSocialDiscussion(client, guildConfig || {}, {
+      limit: 40,
+      hours: 168
+    });
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -1132,7 +1186,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           renderer,
           hostNames,
           linkedManagersContext,
-          reporterContextText
+          reporterContextText,
+          socialDiscussionText
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {

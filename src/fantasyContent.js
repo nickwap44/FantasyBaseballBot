@@ -724,16 +724,18 @@ export async function buildPodcastPackage(
   renderer = config.podcastRenderer,
   hostNames = {},
   linkedManagersContext = "",
-  reporterContextText = ""
+  reporterContextText = "",
+  socialDiscussionText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
     userPrompt: [
       buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
-      reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : ""
+      reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
+      socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : ""
     ].filter(Boolean).join("\n\n"),
     temperature: 1
   });
@@ -764,12 +766,13 @@ export async function buildEmergencyPodcastPackage(
   renderer = config.podcastRenderer,
   hostNames = {},
   linkedManagersContext = "",
-  reporterContextText = ""
+  reporterContextText = "",
+  socialDiscussionText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+      "You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
     userPrompt: [
       `Write an emergency mini-episode for ${formatDateTime(new Date(), timezone)}.`,
       `Focus event: ${focusTransaction.teamName} made a ${focusTransaction.type}${focusTransaction.biddingAmount ? ` for $${focusTransaction.biddingAmount}` : ""}.`,
@@ -779,7 +782,8 @@ export async function buildEmergencyPodcastPackage(
       "Include a quick cold open, one breaking-news exchange, one argument about impact, and a short sign-off.",
       podcastHistory ? `Recent show memory:\n${podcastHistory}` : "",
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
-      reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : ""
+      reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
+      socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : ""
     ].filter(Boolean).join("\n\n"),
     temperature: 1
   });
