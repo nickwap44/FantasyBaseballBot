@@ -549,7 +549,11 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   }
 
   if (feature === "power") {
-    const content = await buildPowerRankings(snapshot, guildConfig.timezone);
+    const content = buildPowerRankings(
+      snapshot,
+      guildConfig.timezone,
+      getCurrentEspnLinks(guildConfig)
+    );
     await channel.send(content);
     return state;
   }
@@ -797,8 +801,8 @@ export async function handleFantasyTest(testType, guildId, client) {
 
   if (normalizedType === "power") {
     const content = testType.startsWith("demo-")
-      ? buildDemoPowerRankings(snapshot, timezone)
-      : await buildPowerRankings(snapshot, timezone);
+      ? buildDemoPowerRankings(snapshot, timezone, getCurrentEspnLinks(guildConfig || {}))
+      : buildPowerRankings(snapshot, timezone, getCurrentEspnLinks(guildConfig || {}));
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "power", content);
       return "Demo power rankings posted.";

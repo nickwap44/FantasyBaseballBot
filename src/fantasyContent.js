@@ -50,6 +50,86 @@ function strongestTeamsBlock(teams) {
     .join("\n");
 }
 
+function normalizeMetric(value, min, max) {
+  if (max === min) {
+    return 50;
+  }
+
+  return ((value - min) / (max - min)) * 100;
+}
+
+function getRosterDepthScore(team) {
+  const starterCount = team.roster.filter((entry) => entry.lineupSlotId < 20).length;
+  const benchCount = team.roster.length - starterCount;
+  return starterCount * 0.75 + benchCount * 0.25;
+}
+
+function getPowerRankingRows(snapshot, espnDiscordLinks = {}) {
+  const teams = snapshot.teams || [];
+  const pointDiffs = teams.map((team) => (team.pointsFor || 0) - (team.pointsAgainst || 0));
+  const pointsForValues = teams.map((team) => team.pointsFor || 0);
+  const depthValues = teams.map((team) => getRosterDepthScore(team));
+
+  const minPointsFor = Math.min(...pointsForValues);
+  const maxPointsFor = Math.max(...pointsForValues);
+  const minPointDiff = Math.min(...pointDiffs);
+  const maxPointDiff = Math.max(...pointDiffs);
+  const minDepth = Math.min(...depthValues);
+  const maxDepth = Math.max(...depthValues);
+
+  return teams
+    .map((team) => {
+      const wins = team.wins || 0;
+      const losses = team.losses || 0;
+      const ties = team.ties || 0;
+      const gamesPlayed = wins + losses + ties;
+      const recordScore = gamesPlayed > 0 ? ((wins + ties * 0.5) / gamesPlayed) * 100 : 50;
+      const pointsForScore = normalizeMetric(team.pointsFor || 0, minPointsFor, maxPointsFor);
+      const pointDiff = (team.pointsFor || 0) - (team.pointsAgainst || 0);
+      const pointDiffScore = normalizeMetric(pointDiff, minPointDiff, maxPointDiff);
+      const rosterDepthScore = normalizeMetric(getRosterDepthScore(team), minDepth, maxDepth);
+      const powerScore =
+        recordScore * 0.45 +
+        pointsForScore * 0.25 +
+        pointDiffScore * 0.2 +
+        rosterDepthScore * 0.1;
+
+      return {
+        team,
+        pointDiff,
+        powerScore,
+        recordScore,
+        pointsForScore,
+        pointDiffScore,
+        rosterDepthScore,
+        linkedUserId: espnDiscordLinks[String(team.id)]?.discordUserId || null
+      };
+    })
+    .sort((left, right) => {
+      if (right.powerScore !== left.powerScore) {
+        return right.powerScore - left.powerScore;
+      }
+
+      if ((right.team.pointsFor || 0) !== (left.team.pointsFor || 0)) {
+        return (right.team.pointsFor || 0) - (left.team.pointsFor || 0);
+      }
+
+      if (right.pointDiff !== left.pointDiff) {
+        return right.pointDiff - left.pointDiff;
+      }
+
+      return left.team.name.localeCompare(right.team.name);
+    });
+}
+
+function formatManagerTag(row) {
+  if (row.linkedUserId) {
+    return `<@${row.linkedUserId}>`;
+  }
+
+  return row.team.manager || "Unknown manager";
+}
+
 function matchupBlock(matchups) {
   return matchups
     .map(
@@ -177,45 +257,32 @@ export function buildDemoTransactionsSummary(snapshot, timezone) {
   ].join("\n");
 }
 
-export async function buildPowerRankings(snapshot, timezone) {
+export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
   if (snapshot.teams.length === 0) {
     return "No teams are populated in ESPN yet, so power rankings will unlock after the draft loads into the league.";
   }
 
-  return generateText({
-    systemPrompt:
-      "You are a sharp fantasy baseball columnist. Write weekly power rankings for Discord. Include two sections: current performance rankings and strongest rosters right now. Be punchy but grounded in the data.",
-    userPrompt: [
-      `Generate power rankings as of ${formatDateTime(new Date(), timezone)}.`,
-      "Standings:",
-      standingsBlock(snapshot.teams),
-      "",
-      "Current week's matchups:",
-      matchupBlock(snapshot.matchups),
-      "",
-      "Strongest roster candidates:",
-      strongestTeamsBlock(snapshot.teams)
-    ].join("\n")
-  });
-}
-
-export function buildDemoPowerRankings(snapshot, timezone) {
-  const ranked = [...snapshot.teams]
-    .sort((left, right) => scoreTeamStrength(right) - scoreTeamStrength(left))
-    .slice(0, 5);
+  const ranked = getPowerRankingRows(snapshot, espnDiscordLinks);
 
   return [
-    `**Weekly Power Rankings Demo**`,
-    `Generated for ${formatDateTime(new Date(), timezone)}`,
+    `**BBA Power Rankings**`,
+    `Filed for ${formatDateTime(new Date(), timezone)}`,
+    `Formula: 45% record, 25% points scored, 20% point differential, 10% roster depth.`,
     "",
-    ...ranked.map(
-      (team, index) =>
-        `${index + 1}. ${team.name} (${team.manager}) - ${team.wins}-${team.losses}, PF ${team.pointsFor.toFixed(1)}`
-    ),
+    ...ranked.map((row, index) => {
+      const team = row.team;
+      const record = `${team.wins}-${team.losses}${team.ties ? `-${team.ties}` : ""}`;
+      const diffPrefix = row.pointDiff >= 0 ? "+" : "";
+      return `${index + 1}. ${team.name} - ${formatManagerTag(row)} | Score ${row.powerScore.toFixed(1)} | Record ${record} | PF ${team.pointsFor.toFixed(1)} | Diff ${diffPrefix}${row.pointDiff.toFixed(1)}`;
+    }),
     "",
-    `Biggest riser: ${ranked[1]?.name || ranked[0]?.name}`,
-    `Most complete roster right now: ${ranked[0]?.name}`
+    `Top roster on the numbers: ${ranked[0].team.name}`,
+    `Biggest climb path: ${ranked[ranked.length - 1].team.name} can move fast with one strong scoring week.`
   ].join("\n");
+}
+
+export function buildDemoPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
+  return buildPowerRankings(snapshot, timezone, espnDiscordLinks);
 }
 
 export async function buildSocialPost(
