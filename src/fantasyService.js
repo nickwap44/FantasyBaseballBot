@@ -236,6 +236,7 @@ function wasReporterTriggerHandled(reporterState, guildId, triggerKey) {
 
 function getReporterAnnouncementChannelId(guildConfig) {
   return (
+    guildConfig.reporterChannelId ||
     guildConfig.socialChannelId ||
     guildConfig.transactionsChannelId ||
     guildConfig.podcastChannelId ||

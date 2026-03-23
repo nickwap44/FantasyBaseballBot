@@ -16,6 +16,7 @@ export async function ensureBootstrapGuildConfig() {
     powerRankingsChannelId:
       existing?.powerRankingsChannelId || appConfig.powerRankingsChannelId,
     socialChannelId: existing?.socialChannelId || appConfig.socialChannelId,
+    reporterChannelId: existing?.reporterChannelId || null,
     podcastChannelId: existing?.podcastChannelId || appConfig.podcastChannelId,
     podcastManualContext: existing?.podcastManualContext || "",
     podcastHostNames: {
@@ -40,6 +41,7 @@ export async function ensureBootstrapGuildConfig() {
     existing.transactionsChannelId !== nextConfig.transactionsChannelId ||
     existing.powerRankingsChannelId !== nextConfig.powerRankingsChannelId ||
     existing.socialChannelId !== nextConfig.socialChannelId ||
+    existing.reporterChannelId !== nextConfig.reporterChannelId ||
     existing.podcastChannelId !== nextConfig.podcastChannelId ||
     existing.podcastManualContext !== nextConfig.podcastManualContext ||
     existing.podcastHostNames?.lead !== nextConfig.podcastHostNames.lead ||

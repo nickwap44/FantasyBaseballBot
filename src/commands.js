@@ -20,6 +20,7 @@ function getDefaultGuildConfig() {
     transactionsChannelId: appConfig.transactionsChannelId,
     powerRankingsChannelId: appConfig.powerRankingsChannelId,
     socialChannelId: appConfig.socialChannelId,
+    reporterChannelId: null,
     podcastChannelId: appConfig.podcastChannelId,
     podcastManualContext: "",
     podcastHostNames: {
@@ -102,6 +103,7 @@ export const commandDefinitions = [
           { name: "transactions", value: "transactions" },
           { name: "power", value: "power" },
           { name: "social", value: "social" },
+          { name: "reporter", value: "reporter" },
           { name: "podcast", value: "podcast" }
         )
     )
@@ -463,6 +465,7 @@ export async function handleCommand(interaction) {
       transactions: "transactionsChannelId",
       power: "powerRankingsChannelId",
       social: "socialChannelId",
+      reporter: "reporterChannelId",
       podcast: "podcastChannelId"
     };
 
@@ -499,6 +502,7 @@ export async function handleCommand(interaction) {
         `Transactions channel: ${guildConfig.transactionsChannelId ? `<#${guildConfig.transactionsChannelId}>` : "not set"}`,
         `Power rankings channel: ${guildConfig.powerRankingsChannelId ? `<#${guildConfig.powerRankingsChannelId}>` : "not set"}`,
         `Social channel: ${guildConfig.socialChannelId ? `<#${guildConfig.socialChannelId}>` : "not set"}`,
+        `Reporter channel: ${guildConfig.reporterChannelId ? `<#${guildConfig.reporterChannelId}>` : "not set"}`,
         `Podcast channel: ${guildConfig.podcastChannelId ? `<#${guildConfig.podcastChannelId}>` : "not set"}`,
         `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
         `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
