@@ -304,6 +304,23 @@ export async function buildSocialPost(
       "League standings:",
       standingsBlock(snapshot.teams.slice(0, 6))
     ].join("\n")
+  }).then((text) => {
+    if (text.trim()) {
+      return text.trim();
+    }
+
+    const topTransaction = snapshot.transactions[0];
+    if (topTransaction) {
+      const amount = topTransaction.biddingAmount ? ` for $${topTransaction.biddingAmount}` : "";
+      return `${LEAGUE_INSIDER_HANDLE}: League sources are already side-eyeing ${topTransaction.teamName} after a ${topTransaction.type.toLowerCase()}${amount}. Somebody in this league thinks today changed everything.`;
+    }
+
+    const topTeam = snapshot.teams[0];
+    if (topTeam) {
+      return `${LEAGUE_INSIDER_HANDLE}: Quiet league day, but nobody in the BBA believes the calm lasts. ${topTeam.name} still has the room talking, and the replies are getting louder.`;
+    }
+
+    return `${LEAGUE_INSIDER_HANDLE}: Slow news cycle in the BBA, which usually means somebody is typing a reckless take right now.`;
   });
 }
 
