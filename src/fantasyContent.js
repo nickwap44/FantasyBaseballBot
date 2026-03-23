@@ -72,6 +72,8 @@ function isSeasonPreviewMode(snapshot) {
 
 const PODCAST_TITLE = "The Backyard Bullpen";
 const PODCAST_SUBTITLE = "The official podcast of the Backyard Baseball Association";
+const LEAGUE_INSIDER_HANDLE = "@BBAInsider";
+const LEAGUE_INSIDER_NAME = "Backyard Sources";
 const PODCAST_SEGMENTS = [
   "Lead-off Check-In",
   "Panic Meter",
@@ -224,7 +226,7 @@ export async function buildSocialPost(
 ) {
   return generateText({
     systemPrompt:
-      "You write one fake Twitter/X-style post for a fantasy baseball league as the BBA League Insider. It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. If the league is still pre-draft, make it about draft anticipation, quiet tension, or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. Do not include hashtags unless they genuinely add something.",
+      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know. If the league is still pre-draft, make it about draft anticipation, quiet tension, or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. Do not include hashtags unless they genuinely add something.`,
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
@@ -241,10 +243,10 @@ export async function buildSocialPost(
 export function buildDemoSocialPost(snapshot, timezone) {
   const topTransaction = snapshot.transactions[0];
   return [
-    `**BBA League Insider Demo**`,
+    `**${LEAGUE_INSIDER_NAME} Demo**`,
     `Posted ${formatDateTime(new Date(), timezone)}`,
     "",
-    `BBA League Insider: Hearing Waiver Wire Wizards dropped $${topTransaction.biddingAmount} on Jackson Holliday like they think the trophy gets handed out in April. League sources say the room respects the aggression and fears the hubris.`
+    `${LEAGUE_INSIDER_HANDLE}: Hearing Waiver Wire Wizards dropped $${topTransaction.biddingAmount} on Jackson Holliday like they think the trophy gets handed out in April. League sources say the room respects the aggression and fears the hubris.`
   ].join("\n");
 }
 
