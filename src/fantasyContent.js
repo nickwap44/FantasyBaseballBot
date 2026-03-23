@@ -176,7 +176,7 @@ export function buildDemoPowerRankings(snapshot, timezone) {
 export async function buildSocialPost(snapshot, timezone, linkedManagersContext = "") {
   return generateText({
     systemPrompt:
-      "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk.",
+      "You write one fake social-media post for a fantasy baseball league. Pick one exaggerated persona, react to a real league event, keep it under 120 words, and make it feel like a single post rather than a recap. If the league is still pre-draft, make it about draft anticipation or early trash talk. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team.",
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
@@ -380,7 +380,7 @@ export async function buildTransactionGrades(
 ) {
   return generateText({
     systemPrompt:
-      "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant.",
+      "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team.",
     userPrompt: [
       `Generate instant transaction grades for ${formatDateTime(new Date(), timezone)}.`,
       registryText ? `Media registry:\n${registryText}` : "",

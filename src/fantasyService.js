@@ -107,14 +107,25 @@ function getCurrentEspnLinks(guildConfig) {
   return guildConfig.espnDiscordLinks || {};
 }
 
-function getLinkedManagersContext(snapshot, guildConfig) {
+async function getLinkedManagersContext(client, guildId, snapshot, guildConfig) {
   const links = getCurrentEspnLinks(guildConfig);
-  const lines = snapshot.teams
-    .filter((team) => links[String(team.id)])
-    .map((team) => {
-      const link = links[String(team.id)];
-      return `- ${team.name} managed by ${team.manager} is linked to <@${link.discordUserId}>`;
-    });
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  const lines = [];
+
+  for (const team of snapshot.teams) {
+    const link = links[String(team.id)];
+    if (!link) {
+      continue;
+    }
+
+    const member = guild
+      ? await guild.members.fetch(link.discordUserId).catch(() => null)
+      : null;
+    const displayName = member?.displayName || member?.user?.globalName || member?.user?.username || "Unknown user";
+    lines.push(
+      `- ${team.name} managed by ${team.manager} is linked to Discord user ${displayName} with mention token <@${link.discordUserId}>`
+    );
+  }
 
   return lines.join("\n");
 }
@@ -214,11 +225,12 @@ async function maybeSendInstantTransactionGrades(client, guildId, guildConfig, s
     return state;
   }
 
+  const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
   const grades = await buildTransactionGrades(
     snapshot,
     guildConfig.timezone,
     formatRegistryForPrompt(registry),
-    getLinkedManagersContext(snapshot, guildConfig)
+    linkedManagersContext
   );
   await channel.send(appendMentionFooter(grades, buildMentionFooter(snapshot, guildConfig, "transactions")));
 
@@ -278,10 +290,11 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   }
 
   if (feature === "social") {
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
     const content = await buildSocialPost(
       snapshot,
       guildConfig.timezone,
-      getLinkedManagersContext(snapshot, guildConfig)
+      linkedManagersContext
     );
     await channel.send(appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "social")));
     return state;
@@ -289,6 +302,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
 
   if (feature === "podcast") {
     const hostNames = guildConfig.podcastHostNames || {};
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
     const previousMemory = [
       state.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
       formatRegistryForPrompt(registry),
@@ -306,7 +320,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       guildConfig.timezone,
       renderer,
       hostNames,
-      getLinkedManagersContext(snapshot, guildConfig)
+      linkedManagersContext
     );
     await channel.send({
       content: [
@@ -467,13 +481,14 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "transaction-grades") {
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
     const content = testType.startsWith("demo-")
       ? buildDemoTransactionGrades(snapshot, timezone)
       : await buildTransactionGrades(
           snapshot,
           timezone,
           "",
-          getLinkedManagersContext(snapshot, guildConfig || {})
+          linkedManagersContext
         );
     const finalContent = appendMentionFooter(
       content,
@@ -500,12 +515,13 @@ export async function handleFantasyTest(testType, guildId, client) {
   }
 
   if (normalizedType === "social") {
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
     const content = testType.startsWith("demo-")
       ? buildDemoSocialPost(snapshot, timezone)
       : await buildSocialPost(
           snapshot,
           timezone,
-          getLinkedManagersContext(snapshot, guildConfig || {})
+          linkedManagersContext
         );
     const finalContent = appendMentionFooter(
       content,
@@ -521,6 +537,7 @@ export async function handleFantasyTest(testType, guildId, client) {
 
   if (normalizedType === "podcast") {
     const hostNames = guildConfig?.podcastHostNames || {};
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -544,7 +561,7 @@ export async function handleFantasyTest(testType, guildId, client) {
           timezone,
           renderer,
           hostNames,
-          getLinkedManagersContext(snapshot, guildConfig || {})
+          linkedManagersContext
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
