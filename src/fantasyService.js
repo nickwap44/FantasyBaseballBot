@@ -493,41 +493,6 @@ function parseRegistrySections(text) {
   return sections;
 }
 
-async function maybeSendInstantTransactionGrades(client, guildId, guildConfig, snapshot, state, registry) {
-  const transactionsChannelId = guildConfig.transactionsChannelId;
-  if (!transactionsChannelId || snapshot.transactions.length === 0) {
-    return state;
-  }
-
-  const latestTransactionId = String(snapshot.transactions[0].id);
-  if (state.lastGradedTransactionId === latestTransactionId) {
-    return state;
-  }
-
-  const channel = await client.channels.fetch(transactionsChannelId);
-  if (!channel?.isTextBased()) {
-    return state;
-  }
-
-  const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
-  const reporterContextText = formatReporterContext(
-    getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
-  );
-  const grades = await buildTransactionGrades(
-    snapshot,
-    guildConfig.timezone,
-    formatRegistryForPrompt(registry),
-    linkedManagersContext,
-    reporterContextText
-  );
-  await channel.send(appendMentionFooter(grades, buildMentionFooter(snapshot, guildConfig, "transactions")));
-
-  return {
-    ...state,
-    lastGradedTransactionId: latestTransactionId
-  };
-}
-
 async function maybeRefreshMediaRegistry(snapshot, timezone, now, state, registry) {
   const latestTransactionId = getLatestTransactionId(snapshot);
   const registryRunKey = getStateKey("media-registry", timezone, now);
@@ -566,8 +531,20 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   }
 
   if (feature === "transactions") {
-    const content = await buildTransactionsSummary(snapshot, guildConfig.timezone);
-    await channel.send(content);
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
+    );
+    const content = await buildTransactionsSummary(
+      snapshot,
+      guildConfig.timezone,
+      formatRegistryForPrompt(registry),
+      linkedManagersContext,
+      reporterContextText
+    );
+    await channel.send(
+      appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "transactions"))
+    );
     return state;
   }
 
@@ -677,15 +654,6 @@ export async function runFantasyJobs(client, logger = console) {
         logger
       );
 
-      nextState[guildId] = await maybeSendInstantTransactionGrades(
-        client,
-        guildId,
-        guildConfig,
-        snapshot,
-        nextState[guildId],
-        nextRegistry[guildId]
-      );
-
       const registryRefresh = await maybeRefreshMediaRegistry(
         snapshot,
         timezone,
@@ -696,7 +664,7 @@ export async function runFantasyJobs(client, logger = console) {
       nextState[guildId] = registryRefresh.state;
       nextRegistry[guildId] = registryRefresh.registry;
     } catch (error) {
-      logger.error(`Fantasy registry/transaction grade update failed for guild ${guildId}:`, error);
+      logger.error(`Fantasy registry update failed for guild ${guildId}:`, error);
     }
 
     for (const feature of ["transactions", "power", "social", "podcast"]) {
@@ -776,15 +744,29 @@ export async function handleFantasyTest(testType, guildId, client) {
     .replace("-tts", "");
 
   if (normalizedType === "transactions") {
+    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
+    const reporterContextText = formatReporterContext(
+      getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
+    );
     const content = testType.startsWith("demo-")
       ? buildDemoTransactionsSummary(snapshot, timezone)
-      : await buildTransactionsSummary(snapshot, timezone);
+      : await buildTransactionsSummary(
+          snapshot,
+          timezone,
+          "",
+          linkedManagersContext,
+          reporterContextText
+        );
+    const finalContent = appendMentionFooter(
+      content,
+      buildMentionFooter(snapshot, guildConfig || {}, "transactions")
+    );
     if (testType.startsWith("demo-")) {
-      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
+      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", finalContent);
       return "Demo transaction recap posted.";
     }
 
-    return content;
+    return finalContent;
   }
 
   if (normalizedType === "transaction-grades") {

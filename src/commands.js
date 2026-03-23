@@ -230,17 +230,17 @@ export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName("reporter-respond")
     .setDescription("Respond to an open request for comment.")
-    .addIntegerOption((option) =>
-      option
-        .setName("inquiry_id")
-        .setDescription("The inquiry number.")
-        .setRequired(false)
-    )
     .addStringOption((option) =>
       option
         .setName("response")
         .setDescription("Your response for the reporter.")
         .setRequired(true)
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("inquiry_id")
+        .setDescription("The inquiry number.")
+        .setRequired(false)
     ),
   new SlashCommandBuilder()
     .setName("reporter-status")

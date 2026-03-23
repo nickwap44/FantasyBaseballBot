@@ -117,14 +117,24 @@ function getHostRoleFromSpeaker(speaker, hostNames = {}) {
   return "lead";
 }
 
-export async function buildTransactionsSummary(snapshot, timezone) {
+export async function buildTransactionsSummary(
+  snapshot,
+  timezone,
+  registryText = "",
+  linkedManagersContext = "",
+  reporterContextText = ""
+) {
   return generateText({
     systemPrompt:
-      "You are an entertaining but accurate fantasy baseball league reporter. Write a concise daily transaction recap for Discord with a headline and 3-5 bullets. If there is no activity yet, say that the league is still quiet and preview what managers should watch for.",
+      "You are the fantasy baseball media desk for the Backyard Baseball Association. Write one daily Discord transaction roundup with a headline, 3-5 bullets, and a short closing takeaway. Fold transaction grades directly into the recap instead of creating a separate post. If there is no activity yet, say that the league is still quiet and preview what managers should watch for. Use any supplied running jokes or host biases sparingly when they fit. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, weave the strongest quote into the roundup when it fits.",
     userPrompt: [
       `League transaction activity as of ${formatDateTime(new Date(), timezone)}:`,
+      registryText ? `Media registry:\n${registryText}` : "",
+      linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
+      reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
+      "Transactions:",
       recentTransactionsBlock(snapshot.transactions)
-    ].join("\n\n")
+    ].filter(Boolean).join("\n\n")
   });
 }
 
@@ -136,10 +146,12 @@ export function buildDemoTransactionsSummary(snapshot, timezone) {
     ...snapshot.transactions.slice(0, 3).map((transaction) => {
       const players = transaction.players.map((player) => `${player.type} ${player.name}`).join(", ");
       const bid = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
-      return `- ${transaction.teamName} made a ${transaction.type.toLowerCase()}${bid}: ${players}`;
+      const grade =
+        transaction.type.toLowerCase() === "trade" ? "B+" : transaction.biddingAmount >= 15 ? "A-" : "B";
+      return `- ${transaction.teamName} made a ${transaction.type.toLowerCase()}${bid}: ${players}. Grade: **${grade}**.`;
     }),
     "",
-    "Takeaway: the waiver wire is already getting spicy, and managers are starting to show their tells."
+    "Takeaway: the waiver wire is already getting spicy, and the daily recap now handles the grades in one pass."
   ].join("\n");
 }
 
