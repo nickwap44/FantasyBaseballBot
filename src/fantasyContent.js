@@ -424,6 +424,133 @@ function buildNarratedTranscript(transcript, hostNames = {}) {
     .filter((line) => line.text);
 }
 
+function formatClockTimestamp(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.max(0, Math.floor(totalSeconds % 60));
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function estimateLineDurationSeconds(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(4, (words / 155) * 60 + 0.6);
+}
+
+function getTopicLabelForLine(text, seasonPreviewMode) {
+  const normalized = text.toLowerCase();
+
+  if (
+    normalized.includes("welcome to the backyard bullpen") ||
+    normalized.includes("before we get rolling") ||
+    normalized.includes("welcome back")
+  ) {
+    return "Cold Open";
+  }
+
+  if (normalized.includes("panic meter")) {
+    return "Panic Meter";
+  }
+
+  if (normalized.includes("april coronation")) {
+    return "April Coronation Watch";
+  }
+
+  if (normalized.includes("waiver") || normalized.includes("trade offer") || normalized.includes("trade")) {
+    return "Waiver Wire and Trade Desk";
+  }
+
+  if (seasonPreviewMode && (normalized.includes("draft") || normalized.includes("roster"))) {
+    return "Draft and Roster Check";
+  }
+
+  if (seasonPreviewMode && (normalized.includes("rivalry") || normalized.includes("drama"))) {
+    return "Rivalry and League Drama";
+  }
+
+  if (
+    normalized.includes("looks like the team everyone is chasing") ||
+    normalized.includes("sets the pace") ||
+    normalized.includes("real conversation") ||
+    normalized.includes("contender")
+  ) {
+    return seasonPreviewMode ? "Season Preview Board" : "Standings Check";
+  }
+
+  if (
+    !seasonPreviewMode &&
+    (normalized.includes("flattening") ||
+      normalized.includes("this week") ||
+      normalized.includes("matchup") ||
+      normalized.includes("results"))
+  ) {
+    return "Matchup Spotlight";
+  }
+
+  if (
+    normalized.includes("that's the show") ||
+    normalized.includes("we'll catch you next time") ||
+    normalized.includes("thanks for tuning in")
+  ) {
+    return "Bullpen Close";
+  }
+
+  return null;
+}
+
+function buildPodcastTopicGuide(transcript, snapshot, hostNames = {}) {
+  const lines = parseTranscriptLines(transcript, hostNames);
+  const seasonPreviewMode = isSeasonPreviewMode(snapshot);
+  const topics = [];
+  let elapsedSeconds = 0;
+
+  for (const line of lines) {
+    const topicLabel = getTopicLabelForLine(line.text, seasonPreviewMode);
+    if (topicLabel && !topics.some((entry) => entry.label === topicLabel)) {
+      topics.push({
+        timestamp: formatClockTimestamp(elapsedSeconds),
+        label: topicLabel
+      });
+    }
+
+    elapsedSeconds += estimateLineDurationSeconds(line.text);
+  }
+
+  if (topics.length < 4) {
+    const fallbackLabels = seasonPreviewMode
+      ? ["Cold Open", "Season Preview Board", "Draft and Roster Check", "Bullpen Close"]
+      : ["Cold Open", "Standings Check", "Waiver Wire and Trade Desk", "Bullpen Close"];
+    const totalDuration = Math.max(elapsedSeconds, 60);
+    const segmentSpacing = totalDuration / fallbackLabels.length;
+
+    for (let index = 0; index < fallbackLabels.length; index += 1) {
+      const label = fallbackLabels[index];
+      if (topics.some((entry) => entry.label === label)) {
+        continue;
+      }
+
+      topics.push({
+        timestamp: formatClockTimestamp(segmentSpacing * index),
+        label
+      });
+    }
+  }
+
+  const sortedTopics = topics
+    .sort((left, right) => {
+      const leftSeconds = left.timestamp.split(":").reduce((total, value) => total * 60 + Number(value), 0);
+      const rightSeconds = right.timestamp.split(":").reduce((total, value) => total * 60 + Number(value), 0);
+      return leftSeconds - rightSeconds;
+    })
+    .slice(0, 6);
+
+  return [
+    `**${PODCAST_TITLE}**`,
+    PODCAST_SUBTITLE,
+    "",
+    "**Topics**",
+    ...sortedTopics.map((topic) => `${topic.timestamp} - ${topic.label}`)
+  ].join("\n");
+}
+
 async function buildTtsPodcastAudio(transcript, hostNames = {}) {
   const lines = buildNarratedTranscript(transcript, hostNames);
   const segments = [];
@@ -598,11 +725,7 @@ export async function buildPodcastPackage(
 
   const mp3Buffer = await buildPodcastPackageAudio(transcript, renderer, resolvedHostNames);
   const transcriptBuffer = Buffer.from(transcript, "utf8");
-  const summary = await generateText({
-    systemPrompt:
-      "Summarize a fantasy baseball podcast transcript in 4 short bullets. Preserve any running jokes or callbacks.",
-    userPrompt: transcript
-  });
+  const summary = buildPodcastTopicGuide(transcript, snapshot, resolvedHostNames);
   const memory = await buildPodcastMemory(transcript);
 
   return {
@@ -650,11 +773,7 @@ export async function buildDemoPodcastPackage(
   ].join("\n");
 
   const summary = [
-    `- ${resolvedHostNames.lead} framed the episode as a proper Backyard Bullpen show open and steered the room through the familiar chaos.`,
-    ...(manualContextLine ? ["- The hosts acknowledged the latest producer note and folded it into the show setup."] : []),
-    `- ${resolvedHostNames.hotTake} revived the April coronation bit around the Jackson Holliday add and fully embraced the panic meter nonsense again.`,
-    `- ${resolvedHostNames.analyst} played cleanup with dry humor and gave a more grounded read on ${snapshot.teams[1].name} as a real threat.`,
-    `- The panic meter, disrespectful-before-breakfast trade offers, and ${resolvedHostNames.analyst}'s rare laughter all came back as running bits.`
+    buildPodcastTopicGuide(transcript, snapshot, resolvedHostNames)
   ].join("\n");
   const memory = [
     `Running jokes: ${resolvedHostNames.hotTake}'s annual April coronation, the panic meter, disrespectful-before-breakfast trade offers, and ${resolvedHostNames.lead} noting every time ${resolvedHostNames.analyst} visibly enjoys the chaos.`,
