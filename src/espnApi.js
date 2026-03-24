@@ -7,6 +7,13 @@ const SPORT_CODE_MAP = {
   hockey: "fhl"
 };
 
+const PUBLIC_LEAGUE_CODE_MAP = {
+  baseball: "mlb",
+  football: "nfl",
+  basketball: "nba",
+  hockey: "nhl"
+};
+
 function getEspnCookieHeader() {
   if (!config.espnS2 || !config.espnSwid) {
     throw new Error("ESPN private league cookies are missing.");
@@ -43,6 +50,67 @@ async function fetchLeague(views) {
   return response.json();
 }
 
+async function fetchPlayerInfoByIds(playerIds) {
+  if (!playerIds.length) {
+    return [];
+  }
+
+  const sportCode = SPORT_CODE_MAP[config.espnSport] || config.espnSport;
+  const url = new URL(
+    `https://fantasy.espn.com/apis/v3/games/${sportCode}/seasons/${config.espnSeason}/segments/0/leagues/${config.espnLeagueId}`
+  );
+  url.searchParams.append("view", "kona_player_info");
+
+  const response = await fetch(url, {
+    headers: {
+      Cookie: getEspnCookieHeader(),
+      Accept: "application/json",
+      "X-Fantasy-Filter": JSON.stringify({
+        players: {
+          filterIds: {
+            value: playerIds
+          },
+          limit: playerIds.length
+        }
+      })
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`ESPN player info request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const payload = await response.json();
+  return payload.players || [];
+}
+
+async function fetchPublicAthleteNamesByIds(playerIds) {
+  if (!playerIds.length) {
+    return new Map();
+  }
+
+  const leagueCode = PUBLIC_LEAGUE_CODE_MAP[config.espnSport] || config.espnSport;
+  const lookups = await Promise.all(
+    playerIds.map(async (playerId) => {
+      const url = `https://sports.core.api.espn.com/v2/sports/${config.espnSport}/leagues/${leagueCode}/athletes/${playerId}`;
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        return [playerId, null];
+      }
+
+      const payload = await response.json();
+      return [playerId, getPlayerDisplayNameOrNull(payload)];
+    })
+  );
+
+  return new Map(lookups.filter(([, name]) => isResolvedPlayerName(name)));
+}
+
 function getMemberMap(members = []) {
   return new Map(
     members.map((member) => {
@@ -76,6 +144,36 @@ function getPlayerDisplayName(playerLike, fallbackId = null) {
     playerLike.name ||
     (fallbackId ? `Player ${fallbackId}` : "Unknown player")
   );
+}
+
+function getPlayerDisplayNameOrNull(playerLike) {
+  if (!playerLike) {
+    return null;
+  }
+
+  const name = getPlayerDisplayName(playerLike);
+  return name === "Unknown player" ? null : name;
+}
+
+function isResolvedPlayerName(name) {
+  return Boolean(name) && !/^Player \d+$/.test(name) && name !== "Unknown player";
+}
+
+function resolveTransactionPlayerName(item, playerNames) {
+  const candidates = [
+    item.playerName,
+    getPlayerDisplayNameOrNull(item.playerPoolEntry?.player),
+    getPlayerDisplayNameOrNull(item.player),
+    playerNames.get(item.playerId)
+  ];
+
+  for (const candidate of candidates) {
+    if (isResolvedPlayerName(candidate)) {
+      return candidate;
+    }
+  }
+
+  return getPlayerDisplayName(null, item.playerId);
 }
 
 function buildPlayerNameMap(payload) {
@@ -156,16 +254,88 @@ function summarizeTransactions(payload) {
       players: (transaction.items || []).map((item) => ({
         playerId: item.playerId,
         type: item.type,
-        name:
-          item.playerName ||
-          getPlayerDisplayName(item.playerPoolEntry?.player, item.playerId) ||
-          getPlayerDisplayName(item.player, item.playerId) ||
-          playerNames.get(item.playerId) ||
-          `Player ${item.playerId}`
+        name: resolveTransactionPlayerName(item, playerNames)
       }))
     }))
     .filter((transaction) => transaction.executionDate)
     .sort((left, right) => right.executionDate - left.executionDate);
+}
+
+function collectUnresolvedTransactionPlayerIds(transactions) {
+  return [...new Set(
+    transactions
+      .flatMap((transaction) => transaction.players || [])
+      .filter((player) => /^Player \d+$/.test(player.name))
+      .map((player) => player.playerId)
+      .filter((playerId) => Number.isFinite(playerId))
+  )];
+}
+
+async function enrichTransactionPlayers(transactions) {
+  const unresolvedIds = collectUnresolvedTransactionPlayerIds(transactions);
+  if (!unresolvedIds.length) {
+    return transactions;
+  }
+
+  let enrichedTransactions = transactions;
+
+  try {
+    const playerInfo = await fetchPlayerInfoByIds(unresolvedIds);
+    const playerNameMap = new Map(
+      playerInfo.map((entry) => {
+        const playerId = entry.id ?? entry.playerId;
+        return [
+          playerId,
+          getPlayerDisplayNameOrNull(entry.player) ||
+            getPlayerDisplayNameOrNull(entry) ||
+            getPlayerDisplayName(null, playerId)
+        ];
+      })
+    );
+
+    enrichedTransactions = transactions.map((transaction) => ({
+      ...transaction,
+      players: transaction.players.map((player) => ({
+        ...player,
+        name: playerNameMap.get(player.playerId) || player.name
+      }))
+    }));
+  } catch (error) {
+    console.warn("ESPN player info lookup failed while resolving transaction names.", {
+      message: error.message,
+      unresolvedIds: unresolvedIds.slice(0, 25)
+    });
+  }
+
+  const stillUnresolved = collectUnresolvedTransactionPlayerIds(enrichedTransactions);
+  if (!stillUnresolved.length) {
+    return enrichedTransactions;
+  }
+
+  try {
+    const publicAthleteNameMap = await fetchPublicAthleteNamesByIds(stillUnresolved);
+    enrichedTransactions = enrichedTransactions.map((transaction) => ({
+      ...transaction,
+      players: transaction.players.map((player) => ({
+        ...player,
+        name: publicAthleteNameMap.get(player.playerId) || player.name
+      }))
+    }));
+  } catch (error) {
+    console.warn("Public ESPN athlete lookup failed while resolving transaction names.", {
+      message: error.message,
+      unresolvedIds: stillUnresolved.slice(0, 25)
+    });
+  }
+
+  const finalUnresolved = collectUnresolvedTransactionPlayerIds(enrichedTransactions);
+  if (finalUnresolved.length) {
+    console.warn("Still unresolved ESPN transaction player IDs after all lookup passes.", {
+      unresolvedIds: finalUnresolved.slice(0, 25)
+    });
+  }
+
+  return enrichedTransactions;
 }
 
 function summarizeMatchups(payload) {
@@ -208,7 +378,7 @@ export async function getLeagueSnapshot() {
     seasonId: payload.seasonId,
     currentScoringPeriod: getCurrentScoringPeriod(payload),
     teams: summarizeTeams(payload),
-    transactions: summarizeTransactions(payload),
+    transactions: await enrichTransactionPlayers(summarizeTransactions(payload)),
     matchups: summarizeMatchups(payload),
     raw: payload
   };
