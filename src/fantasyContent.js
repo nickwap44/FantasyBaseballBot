@@ -334,8 +334,6 @@ export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
   return [
     `**BBA Power Rankings**`,
     `Filed for ${formatDateTime(new Date(), timezone)}`,
-    `Formula: 45% record, 25% points scored, 20% point differential, 10% roster depth.`,
-    "",
     ...ranked.map((row, index) => {
       const team = row.team;
       const record = `${team.wins}-${team.losses}${team.ties ? `-${team.ties}` : ""}`;
