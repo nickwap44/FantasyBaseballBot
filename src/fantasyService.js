@@ -964,6 +964,7 @@ export async function runFantasyJobs(client, logger = console) {
           ...updatedState,
           [runKey]: new Date().toISOString()
         };
+        await saveFantasyState(nextState);
       } catch (error) {
         logger.error(`Fantasy job failed for ${feature} in guild ${guildId}:`, error);
       }
