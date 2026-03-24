@@ -65,6 +65,53 @@ function getCurrentScoringPeriod(payload) {
   return payload?.status?.currentScoringPeriod || payload?.scoringPeriodId || 1;
 }
 
+function getPlayerDisplayName(playerLike, fallbackId = null) {
+  if (!playerLike) {
+    return fallbackId ? `Player ${fallbackId}` : "Unknown player";
+  }
+
+  return (
+    playerLike.fullName ||
+    [playerLike.firstName, playerLike.lastName].filter(Boolean).join(" ").trim() ||
+    playerLike.name ||
+    (fallbackId ? `Player ${fallbackId}` : "Unknown player")
+  );
+}
+
+function buildPlayerNameMap(payload) {
+  const playerNames = new Map();
+
+  for (const team of payload.teams || []) {
+    for (const entry of team.roster?.entries || []) {
+      playerNames.set(
+        entry.playerId,
+        getPlayerDisplayName(entry.playerPoolEntry?.player, entry.playerId)
+      );
+    }
+  }
+
+  const playersCollection = payload.players;
+  if (Array.isArray(playersCollection)) {
+    for (const player of playersCollection) {
+      const playerId = player.id ?? player.playerId;
+      if (playerId == null) {
+        continue;
+      }
+
+      playerNames.set(playerId, getPlayerDisplayName(player, playerId));
+    }
+  } else if (playersCollection && typeof playersCollection === "object") {
+    for (const [key, player] of Object.entries(playersCollection)) {
+      const playerId = Number.parseInt(key, 10);
+      if (Number.isFinite(playerId)) {
+        playerNames.set(playerId, getPlayerDisplayName(player, playerId));
+      }
+    }
+  }
+
+  return playerNames;
+}
+
 function summarizeTeams(payload) {
   const memberMap = getMemberMap(payload.members);
 
@@ -95,6 +142,7 @@ function summarizeTeams(payload) {
 
 function summarizeTransactions(payload) {
   const teams = new Map((payload.teams || []).map((team) => [team.id, getTeamName(team)]));
+  const playerNames = buildPlayerNameMap(payload);
 
   return (payload.transactions || [])
     .map((transaction) => ({
@@ -108,7 +156,12 @@ function summarizeTransactions(payload) {
       players: (transaction.items || []).map((item) => ({
         playerId: item.playerId,
         type: item.type,
-        name: item.playerName || `Player ${item.playerId}`
+        name:
+          item.playerName ||
+          getPlayerDisplayName(item.playerPoolEntry?.player, item.playerId) ||
+          getPlayerDisplayName(item.player, item.playerId) ||
+          playerNames.get(item.playerId) ||
+          `Player ${item.playerId}`
       }))
     }))
     .filter((transaction) => transaction.executionDate)
