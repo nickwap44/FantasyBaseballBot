@@ -185,68 +185,6 @@ function getOpenMailbagQuestions(mailbagState, guildId, limit = 4) {
     .slice(0, limit);
 }
 
-function getRelevantTeamIds(snapshot, feature) {
-  if (feature === "transactions") {
-    return snapshot.transactions.slice(0, 5).map((transaction) => transaction.teamId);
-  }
-
-  if (feature === "social") {
-    return [
-      ...snapshot.transactions.slice(0, 3).map((transaction) => transaction.teamId),
-      ...snapshot.teams.slice(0, 3).map((team) => team.id)
-    ];
-  }
-
-  if (feature === "podcast") {
-    return [
-      ...snapshot.transactions.slice(0, 4).map((transaction) => transaction.teamId),
-      ...snapshot.matchups.flatMap((matchup) => [matchup.homeTeamId, matchup.awayTeamId]).slice(0, 6)
-    ];
-  }
-
-  return [];
-}
-
-function buildMentionFooter(snapshot, guildConfig, feature) {
-  const links = getCurrentEspnLinks(guildConfig);
-  const teamsById = new Map(snapshot.teams.map((team) => [String(team.id), team]));
-  const featured = [];
-
-  for (const teamId of getRelevantTeamIds(snapshot, feature)) {
-    const key = String(teamId);
-    const link = links[key];
-    const team = teamsById.get(key);
-    if (!link || !team) {
-      continue;
-    }
-
-    if (featured.some((entry) => entry.discordUserId === link.discordUserId)) {
-      continue;
-    }
-
-    featured.push({
-      discordUserId: link.discordUserId,
-      teamName: team.name
-    });
-  }
-
-  if (featured.length === 0) {
-    return "";
-  }
-
-  return `Featured managers: ${featured
-    .map((entry) => `<@${entry.discordUserId}> (${entry.teamName})`)
-    .join(", ")}`;
-}
-
-function appendMentionFooter(content, footer) {
-  if (!footer) {
-    return content;
-  }
-
-  return [content.trim(), "", footer].filter(Boolean).join("\n");
-}
-
 async function buildFantasyTrollReply(messageContent) {
   return generateText({
     systemPrompt:
@@ -809,7 +747,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       linkedManagersContext,
       reporterContextText
     );
-    await channel.send(appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "social")));
+    await channel.send(content);
     return state;
   }
 
@@ -851,8 +789,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
         "Weekly fantasy podcast is live.",
         `AI-generated voices and script based on league results and transaction activity. Renderer: ${renderer}.`,
         "",
-        podcast.summary,
-        buildMentionFooter(snapshot, guildConfig, "podcast")
+        podcast.summary
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
     });
@@ -1167,16 +1104,12 @@ export async function handleFantasyTest(testType, guildId, client) {
           linkedManagersContext,
           reporterContextText
         );
-    const finalContent = appendMentionFooter(
-      content,
-      buildMentionFooter(snapshot, guildConfig || {}, "transactions")
-    );
     if (testType.startsWith("demo-")) {
-      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", finalContent);
+      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
       return "Demo transaction grades posted.";
     }
 
-    return finalContent;
+    return content;
   }
 
   if (normalizedType === "power") {
@@ -1204,16 +1137,12 @@ export async function handleFantasyTest(testType, guildId, client) {
           linkedManagersContext,
           reporterContextText
         );
-    const finalContent = appendMentionFooter(
-      content,
-      buildMentionFooter(snapshot, guildConfig || {}, "social")
-    );
     if (testType.startsWith("demo-")) {
-      await sendTestContentToFeatureChannel(client, guildConfig, "social", finalContent);
+      await sendTestContentToFeatureChannel(client, guildConfig, "social", content);
       return "Demo social post sent.";
     }
 
-    return finalContent;
+    return content;
   }
 
   if (normalizedType === "podcast") {
@@ -1271,8 +1200,7 @@ export async function handleFantasyTest(testType, guildId, client) {
         testType.startsWith("demo-") ? "Demo podcast test episode." : "Manual podcast test episode.",
         `AI-generated voices and script. Renderer: ${renderer}.`,
         "",
-        podcast.summary,
-        buildMentionFooter(snapshot, guildConfig || {}, "podcast")
+        podcast.summary
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
     });
