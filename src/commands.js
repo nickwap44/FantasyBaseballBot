@@ -24,6 +24,7 @@ function getDefaultGuildConfig() {
     podcastChannelId: appConfig.podcastChannelId,
     fantasyTrollEnabled: false,
     podcastManualContext: "",
+    rivalries: [],
     podcastHostNames: {
       lead: "Mason",
       hotTake: "Rico",
@@ -208,6 +209,33 @@ export const commandDefinitions = [
       option
         .setName("user")
         .setDescription("The Discord user to link.")
+        .setRequired(false)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("rivalry")
+    .setDescription("Set or inspect manual rivalry pairings for the league.")
+    .addStringOption((option) =>
+      option
+        .setName("action")
+        .setDescription("What you want to do.")
+        .setRequired(true)
+        .addChoices(
+          { name: "set", value: "set" },
+          { name: "show", value: "show" },
+          { name: "clear", value: "clear" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("team_a")
+        .setDescription("First ESPN team id, name, or manager.")
+        .setRequired(false)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("team_b")
+        .setDescription("Second ESPN team id, name, or manager.")
         .setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
@@ -554,6 +582,7 @@ export async function handleCommand(interaction) {
         `Fantasy Troll: ${guildConfig.fantasyTrollEnabled ? "enabled" : "disabled"}`,
         `Podcast manual context: ${guildConfig.podcastManualContext?.trim() ? "set" : "none"}`,
         `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
+        `Manual rivalries: ${(guildConfig.rivalries || []).length}`,
         `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`,
         `Reporter inquiries: ${guildReporterState.inquiries.length}`,
         `Mailbag questions: ${guildMailbagState.questions.filter((question) => question.status === "open").length} open`
@@ -757,6 +786,88 @@ export async function handleCommand(interaction) {
     await saveGuildConfig(guildId, guildConfig);
     await interaction.reply({
       content: `Linked ${matchedTeam.name} (${matchedTeam.manager}) to ${userMention(user.id)}.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "rivalry") {
+    const action = interaction.options.getString("action", true);
+    const currentRivalries = guildConfig.rivalries || [];
+
+    if (action === "show") {
+      if (currentRivalries.length === 0) {
+        await interaction.reply({
+          content: "No manual rivalries are configured yet.",
+          ephemeral: true
+        });
+        return;
+      }
+
+      await interaction.reply({
+        content: currentRivalries
+          .map((rivalry, index) => `#${index + 1} ${rivalry.teamAName} vs ${rivalry.teamBName}`)
+          .join("\n"),
+        ephemeral: true
+      });
+      return;
+    }
+
+    const teamAQuery = interaction.options.getString("team_a");
+    const teamBQuery = interaction.options.getString("team_b");
+    if (!teamAQuery || !teamBQuery) {
+      await interaction.reply({
+        content: "Please include both `team_a` and `team_b`.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const snapshot = await getLeagueSnapshot();
+    const teamA = findEspnTeam(snapshot, teamAQuery);
+    const teamB = findEspnTeam(snapshot, teamBQuery);
+    if (!teamA || !teamB) {
+      await interaction.reply({
+        content: "I couldn't find one of those ESPN teams or managers. Use `/espn-link action:list-teams` to see valid options.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (teamA.id === teamB.id) {
+      await interaction.reply({
+        content: "A rivalry needs two different teams.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const rivalryKey = [teamA.id, teamB.id].sort((left, right) => left - right).join("-");
+
+    if (action === "clear") {
+      guildConfig.rivalries = currentRivalries.filter((rivalry) => rivalry.key !== rivalryKey);
+      await saveGuildConfig(guildId, guildConfig);
+      await interaction.reply({
+        content: `Removed the rivalry pairing for ${teamA.name} and ${teamB.name}.`,
+        ephemeral: true
+      });
+      return;
+    }
+
+    const nextRivalries = [
+      ...currentRivalries.filter((rivalry) => rivalry.key !== rivalryKey),
+      {
+        key: rivalryKey,
+        teamAId: teamA.id,
+        teamAName: teamA.name,
+        teamBId: teamB.id,
+        teamBName: teamB.name
+      }
+    ];
+    guildConfig.rivalries = nextRivalries;
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: `Saved rivalry: ${teamA.name} vs ${teamB.name}.`,
       ephemeral: true
     });
     return;

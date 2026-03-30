@@ -447,6 +447,38 @@ function wasReporterTriggerHandled(reporterState, guildId, triggerKey) {
   return Boolean(state.triggerKeys?.[triggerKey]);
 }
 
+function getWeeklyReporterCapKey(scoringPeriod) {
+  return `auto-reporter:${scoringPeriod}`;
+}
+
+function isAutomaticReporterAskAvailable(reporterState, guildId, scoringPeriod) {
+  return !wasReporterTriggerHandled(reporterState, guildId, getWeeklyReporterCapKey(scoringPeriod));
+}
+
+function markAutomaticReporterAskUsed(reporterState, guildId, scoringPeriod) {
+  markReporterTrigger(reporterState, guildId, getWeeklyReporterCapKey(scoringPeriod));
+}
+
+function getConfiguredRivalryMatchup(guildConfig, snapshot) {
+  const rivalries = guildConfig.rivalries || [];
+  if (!rivalries.length) {
+    return null;
+  }
+
+  const rivalryMap = new Map(
+    rivalries.map((rivalry) => [rivalry.key, rivalry])
+  );
+
+  return snapshot.matchups.find((matchup) => {
+    if (!matchup.homeTeamId || !matchup.awayTeamId) {
+      return false;
+    }
+
+    const key = [matchup.homeTeamId, matchup.awayTeamId].sort((left, right) => left - right).join("-");
+    return rivalryMap.has(key);
+  }) || null;
+}
+
 function getReporterAnnouncementChannelId(guildConfig) {
   return (
     guildConfig.reporterChannelId ||
@@ -530,6 +562,10 @@ async function maybeCreateAutomaticReporterInquiries(
     return;
   }
 
+  if (!isAutomaticReporterAskAvailable(reporterState, guildId, snapshot.currentScoringPeriod)) {
+    return;
+  }
+
   for (const transaction of snapshot.transactions.slice(0, 5)) {
     const link = links[String(transaction.teamId)];
     if (!link) {
@@ -555,6 +591,8 @@ async function maybeCreateAutomaticReporterInquiries(
           "Controversial trade"
         );
         markReporterTrigger(reporterState, guildId, triggerKey);
+        markAutomaticReporterAskUsed(reporterState, guildId, snapshot.currentScoringPeriod);
+        return;
       }
     }
 
@@ -577,43 +615,24 @@ async function maybeCreateAutomaticReporterInquiries(
           "Big waiver bid"
         );
         markReporterTrigger(reporterState, guildId, triggerKey);
+        markAutomaticReporterAskUsed(reporterState, guildId, snapshot.currentScoringPeriod);
+        return;
       }
     }
   }
 
-  const rankedTeams = [...snapshot.teams].sort((a, b) => {
-    if (b.wins !== a.wins) {
-      return b.wins - a.wins;
-    }
-
-    return b.pointsFor - a.pointsFor;
-  });
-
-  const rivalryMatchup = snapshot.matchups
-    .filter((matchup) => matchup.homeTeamId && matchup.awayTeamId)
-    .map((matchup) => {
-      const homeIndex = rankedTeams.findIndex((team) => team.id === matchup.homeTeamId);
-      const awayIndex = rankedTeams.findIndex((team) => team.id === matchup.awayTeamId);
-      return {
-        ...matchup,
-        rivalryScore: (homeIndex + 1) + (awayIndex + 1)
-      };
-    })
-    .sort((a, b) => a.rivalryScore - b.rivalryScore)[0];
+  const rivalryMatchup = getConfiguredRivalryMatchup(guildConfig, snapshot);
 
   if (rivalryMatchup) {
     const sortedIds = [rivalryMatchup.homeTeamId, rivalryMatchup.awayTeamId].sort((a, b) => a - b);
     const triggerKey = `rivalry:${snapshot.currentScoringPeriod}:${sortedIds.join("-")}`;
     if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
-      for (const teamId of sortedIds) {
-        const link = links[String(teamId)];
-        const team = snapshot.teams.find((entry) => entry.id === teamId);
-        if (!link || !team) {
-          continue;
-        }
-
-        const opponentId = sortedIds.find((id) => id !== teamId);
-        const opponent = snapshot.teams.find((entry) => entry.id === opponentId);
+      const teamId = rivalryMatchup.homeTeamId;
+      const opponentId = rivalryMatchup.awayTeamId;
+      const link = links[String(teamId)];
+      const team = snapshot.teams.find((entry) => entry.id === teamId);
+      const opponent = snapshot.teams.find((entry) => entry.id === opponentId);
+      if (link && team) {
         await createReporterInquiry(
           client,
           reporterState,
@@ -629,8 +648,10 @@ async function maybeCreateAutomaticReporterInquiries(
           },
           "Rivalry week spotlight"
         );
+        markReporterTrigger(reporterState, guildId, triggerKey);
+        markAutomaticReporterAskUsed(reporterState, guildId, snapshot.currentScoringPeriod);
+        return;
       }
-      markReporterTrigger(reporterState, guildId, triggerKey);
     }
   }
 
@@ -684,8 +705,10 @@ async function maybeCreateAutomaticReporterInquiries(
           },
           "Blowout result"
         );
+        markReporterTrigger(reporterState, guildId, triggerKey);
+        markAutomaticReporterAskUsed(reporterState, guildId, snapshot.currentScoringPeriod);
+        return;
       }
-      markReporterTrigger(reporterState, guildId, triggerKey);
     }
   }
 }
