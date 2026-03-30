@@ -265,62 +265,57 @@ function getHostRoleFromSpeaker(speaker, hostNames = {}) {
   return "lead";
 }
 
-export async function buildTransactionsSummary(
+export function buildTransactionsSummary(
   snapshot,
   timezone,
-  registryText = "",
-  linkedManagersContext = "",
-  reporterContextText = ""
+  espnDiscordLinks = {}
 ) {
-  return generateText({
-    systemPrompt:
-      "You are the fantasy baseball media desk for the Backyard Baseball Association. Write one daily Discord transaction roundup with a headline, 3-5 bullets, and a short closing takeaway. Fold transaction grades directly into the recap instead of creating a separate post. If there is no activity yet, say that the league is still quiet and preview what managers should watch for. Use any supplied running jokes or host biases sparingly when they fit. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, weave the strongest quote into the roundup when it fits.",
-    userPrompt: [
-      `League transaction activity as of ${formatDateTime(new Date(), timezone)}:`,
-      registryText ? `Media registry:\n${registryText}` : "",
-      linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
-      reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
-      "Transactions:",
-      recentTransactionsBlock(snapshot.transactions)
-    ].filter(Boolean).join("\n\n")
-  }).then((text) => {
-    if (text.trim()) {
-      return text;
-    }
+  const waiverMoves = snapshot.transactions
+    .map((transaction) => {
+      const adds = (transaction.players || [])
+        .filter((player) => player.type === "ADD")
+        .map((player) => player.name);
+      const drops = (transaction.players || [])
+        .filter((player) => player.type === "DROP")
+        .map((player) => player.name);
 
-    const recentItems = snapshot.transactions.slice(0, 3);
-    return [
-      "**Daily Transactions Report**",
-      `Filed for ${formatDateTime(new Date(), timezone)}`,
-      "",
-      ...(recentItems.length > 0
-        ? recentItems.map((transaction) => {
-            const players = transaction.players.map((player) => `${player.type} ${player.name}`).join(", ");
-            const bid = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
-            return `- ${transaction.teamName} made a ${transaction.type.toLowerCase()}${bid}: ${players}.`;
-          })
-        : ["- No new transaction activity was returned today."]),
-      "",
-      "Takeaway: the recap generator came back empty, so this is the fallback box score version."
-    ].join("\n");
-  });
+      if (!adds.length && !drops.length) {
+        return null;
+      }
+
+      const linkedUserId = espnDiscordLinks[String(transaction.teamId)]?.discordUserId || null;
+      const managerLabel = linkedUserId ? `<@${linkedUserId}>` : transaction.teamName;
+      const bidText = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
+      const parts = [];
+
+      if (adds.length) {
+        parts.push(`added ${adds.join(", ")}${bidText}`);
+      }
+
+      if (drops.length) {
+        parts.push(`dropped ${drops.join(", ")}`);
+      }
+
+      return `- ${managerLabel} (${transaction.teamName}): ${parts.join("; ")}.`;
+    })
+    .filter(Boolean);
+
+  return [
+    "**Daily Waiver Wire Report**",
+    `Filed for ${formatDateTime(new Date(), timezone)}`,
+    "",
+    ...(waiverMoves.length > 0
+      ? waiverMoves
+      : ["- No waiver adds or drops were returned today."])
+  ].join("\n");
 }
 
 export function buildDemoTransactionsSummary(snapshot, timezone) {
-  return [
-    `**Daily Transactions Demo**`,
-    `Generated for ${formatDateTime(new Date(), timezone)}`,
-    "",
-    ...snapshot.transactions.slice(0, 3).map((transaction) => {
-      const players = transaction.players.map((player) => `${player.type} ${player.name}`).join(", ");
-      const bid = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
-      const grade =
-        transaction.type.toLowerCase() === "trade" ? "B+" : transaction.biddingAmount >= 15 ? "A-" : "B";
-      return `- ${transaction.teamName} made a ${transaction.type.toLowerCase()}${bid}: ${players}. Grade: **${grade}**.`;
-    }),
-    "",
-    "Takeaway: the waiver wire is already getting spicy, and the daily recap now handles the grades in one pass."
-  ].join("\n");
+  const demoLinks = {
+    [String(snapshot.transactions[0]?.teamId || 0)]: { discordUserId: "123456789012345678" }
+  };
+
+  return buildTransactionsSummary(snapshot, timezone, demoLinks);
 }
 
 export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {

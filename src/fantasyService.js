@@ -775,20 +775,12 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
   }
 
   if (feature === "transactions") {
-    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
-    const reporterContextText = formatReporterContext(
-      getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
-    );
-    const content = await buildTransactionsSummary(
+    const content = buildTransactionsSummary(
       snapshot,
       guildConfig.timezone,
-      formatRegistryForPrompt(registry),
-      linkedManagersContext,
-      reporterContextText
+      getCurrentEspnLinks(guildConfig)
     );
-    const sentMessage = await channel.send(
-      appendMentionFooter(content, buildMentionFooter(snapshot, guildConfig, "transactions"))
-    );
+    const sentMessage = await channel.send(content);
     return registerReactionEligibleTransactionPost(
       state,
       sentMessage,
@@ -1146,29 +1138,19 @@ export async function handleFantasyTest(testType, guildId, client) {
     .replace("-tts", "");
 
   if (normalizedType === "transactions") {
-    const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
-    const reporterContextText = formatReporterContext(
-      getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
-    );
     const content = testType.startsWith("demo-")
       ? buildDemoTransactionsSummary(snapshot, timezone)
-      : await buildTransactionsSummary(
+      : buildTransactionsSummary(
           snapshot,
           timezone,
-          "",
-          linkedManagersContext,
-          reporterContextText
+          getCurrentEspnLinks(guildConfig || {})
         );
-    const finalContent = appendMentionFooter(
-      content,
-      buildMentionFooter(snapshot, guildConfig || {}, "transactions")
-    );
     if (testType.startsWith("demo-")) {
-      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", finalContent);
+      await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
       return "Demo transaction recap posted.";
     }
 
-    return finalContent;
+    return content;
   }
 
   if (normalizedType === "transaction-grades") {
