@@ -131,7 +131,7 @@ async function getLinkedManagersContext(client, guildId, snapshot, guildConfig) 
       : null;
     const displayName = member?.displayName || member?.user?.globalName || member?.user?.username || "Unknown user";
     lines.push(
-      `- ${team.name} managed by ${team.manager} is linked to Discord user ${displayName} with mention token <@${link.discordUserId}>`
+      `- ${team.name} managed by ${team.manager} is linked to Discord user ${displayName} with mention token <@${link.discordUserId}>. Refer to this team as "${team.name}" and not by an abbreviation.`
     );
   }
 
