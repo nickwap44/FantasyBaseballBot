@@ -120,8 +120,33 @@ function getMemberMap(members = []) {
   );
 }
 
+function decodeFantasyTeamName(rawName) {
+  if (!rawName) {
+    return "";
+  }
+
+  if (typeof rawName === "string") {
+    return rawName.trim();
+  }
+
+  if (Array.isArray(rawName)) {
+    const decoded = rawName
+      .map((value) => (Number.isFinite(value) ? String.fromCharCode(value) : ""))
+      .join("")
+      .trim();
+    return decoded;
+  }
+
+  return "";
+}
+
 function getTeamName(team) {
-  return [team.location, team.nickname].filter(Boolean).join(" ").trim() || team.abbrev || "Unknown Team";
+  return (
+    decodeFantasyTeamName(team.name) ||
+    [team.location, team.nickname].filter(Boolean).join(" ").trim() ||
+    team.abbrev ||
+    "Unknown Team"
+  );
 }
 
 function getManagerName(team, memberMap) {
