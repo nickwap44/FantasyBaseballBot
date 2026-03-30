@@ -313,9 +313,9 @@ async function triggerEmergencyPodcast(
       : "tts";
   const hostNames = guildConfig.podcastHostNames || {};
   const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
-  const reporterContextText = formatReporterContext(
-    getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
-  );
+  const reporterState = await getReporterState();
+  const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "podcast");
+  const reporterContextText = formatReporterContext(reporterQuotes);
   const previousMemory = [
     guildState.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
     guildConfig.podcastManualContext?.trim()
@@ -357,6 +357,8 @@ async function triggerEmergencyPodcast(
     memory: podcast.memory,
     transcript: podcast.transcript
   });
+  markReporterQuotesUsed(reporterState, guildId, "podcast", reporterQuotes);
+  await saveReporterState(reporterState);
 
   return {
     ...guildState,
@@ -390,14 +392,43 @@ function getReporterQuotesForFeature(reporterState, guildId, feature) {
   return state.inquiries
     .filter((inquiry) => inquiry.status === "responded")
     .filter((inquiry) => inquiry.features.includes(feature))
+    .filter((inquiry) => !inquiry.quoteUsage?.[feature])
     .slice(-5)
     .map((inquiry) => ({
+      inquiryId: inquiry.id,
       teamName: inquiry.teamName,
       manager: inquiry.manager,
       prompt: inquiry.prompt,
       response: inquiry.response,
       features: inquiry.features
     }));
+}
+
+function markReporterQuotesUsed(reporterState, guildId, feature, quotes = []) {
+  if (!quotes.length) {
+    return;
+  }
+
+  const usedIds = new Set(quotes.map((quote) => quote.inquiryId).filter(Boolean));
+  if (!usedIds.size) {
+    return;
+  }
+
+  const state = getReporterStateForGuild(reporterState, guildId);
+  reporterState[guildId] = {
+    ...state,
+    inquiries: state.inquiries.map((inquiry) =>
+      usedIds.has(inquiry.id)
+        ? {
+            ...inquiry,
+            quoteUsage: {
+              ...(inquiry.quoteUsage || {}),
+              [feature]: new Date().toISOString()
+            }
+          }
+        : inquiry
+    )
+  };
 }
 
 function markReporterTrigger(reporterState, guildId, triggerKey) {
@@ -472,6 +503,7 @@ async function createReporterInquiry(
     response: "",
     respondedAt: null,
     respondedByUserId: null,
+    quoteUsage: {},
     ...inquiryInput
   };
 
@@ -738,9 +770,9 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
 
   if (feature === "social") {
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
-    const reporterContextText = formatReporterContext(
-      getReporterQuotesForFeature(await getReporterState(), guildId, "social")
-    );
+    const reporterState = await getReporterState();
+    const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "social");
+    const reporterContextText = formatReporterContext(reporterQuotes);
     const content = await buildSocialPost(
       snapshot,
       guildConfig.timezone,
@@ -748,15 +780,17 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       reporterContextText
     );
     await channel.send(content);
+    markReporterQuotesUsed(reporterState, guildId, "social", reporterQuotes);
+    await saveReporterState(reporterState);
     return state;
   }
 
   if (feature === "podcast") {
     const hostNames = guildConfig.podcastHostNames || {};
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig);
-    const reporterContextText = formatReporterContext(
-      getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
-    );
+    const reporterState = await getReporterState();
+    const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "podcast");
+    const reporterContextText = formatReporterContext(reporterQuotes);
     const previousMemory = [
       state.podcastMemoryHistory?.slice(-4).join("\n\n") || "",
       formatRegistryForPrompt(registry),
@@ -802,6 +836,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       memory: podcast.memory,
       transcript: podcast.transcript
     });
+    markReporterQuotesUsed(reporterState, guildId, "podcast", reporterQuotes);
+    await saveReporterState(reporterState);
 
     if (mailbagQuestions.length > 0) {
       const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
@@ -1126,9 +1162,9 @@ export async function handleFantasyTest(testType, guildId, client) {
 
   if (normalizedType === "social") {
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
-    const reporterContextText = formatReporterContext(
-      getReporterQuotesForFeature(await getReporterState(), guildId, "social")
-    );
+    const reporterState = await getReporterState();
+    const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "social");
+    const reporterContextText = formatReporterContext(reporterQuotes);
     const content = testType.startsWith("demo-")
       ? buildDemoSocialPost(snapshot, timezone)
       : await buildSocialPost(
@@ -1142,15 +1178,17 @@ export async function handleFantasyTest(testType, guildId, client) {
       return "Demo social post sent.";
     }
 
+    markReporterQuotesUsed(reporterState, guildId, "social", reporterQuotes);
+    await saveReporterState(reporterState);
     return content;
   }
 
   if (normalizedType === "podcast") {
     const hostNames = guildConfig?.podcastHostNames || {};
     const linkedManagersContext = await getLinkedManagersContext(client, guildId, snapshot, guildConfig || {});
-    const reporterContextText = formatReporterContext(
-      getReporterQuotesForFeature(await getReporterState(), guildId, "podcast")
-    );
+    const reporterState = await getReporterState();
+    const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "podcast");
+    const reporterContextText = formatReporterContext(reporterQuotes);
     const mailbagState = await getMailbagState();
     const socialDiscussionText = await getRecentSocialDiscussion(client, guildConfig || {}, {
       limit: 40,
@@ -1213,6 +1251,10 @@ export async function handleFantasyTest(testType, guildId, client) {
       memory: podcast.memory,
       transcript: podcast.transcript
     });
+    if (!testType.startsWith("demo-")) {
+      markReporterQuotesUsed(reporterState, guildId, "podcast", reporterQuotes);
+      await saveReporterState(reporterState);
+    }
 
     return "Podcast test episode posted.";
   }

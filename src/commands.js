@@ -801,7 +801,8 @@ export async function handleCommand(interaction) {
       askedByUserId: interaction.user.id,
       response: "",
       respondedAt: null,
-      respondedByUserId: null
+      respondedByUserId: null,
+      quoteUsage: {}
     };
 
     reporterState[guildId] = {
@@ -860,6 +861,7 @@ export async function handleCommand(interaction) {
     inquiry.response = response.slice(0, 1000);
     inquiry.respondedAt = new Date().toISOString();
     inquiry.respondedByUserId = interaction.user.id;
+    inquiry.quoteUsage = inquiry.quoteUsage || {};
     reporterState[guildId] = guildReporterState;
     await saveReporterState(reporterState);
 
@@ -878,6 +880,9 @@ export async function handleCommand(interaction) {
         `#${inquiry.id} ${inquiry.teamName} (${inquiry.manager})`,
         `Status: ${inquiry.status}`,
         `Features: ${inquiry.features.join(", ")}`,
+        inquiry.status === "responded"
+          ? `Quote usage: social ${inquiry.quoteUsage?.social ? "used" : "open"}, podcast ${inquiry.quoteUsage?.podcast ? "used" : "open"}`
+          : "Quote usage: not available until a response is submitted",
         `Prompt: ${inquiry.prompt}`,
         inquiry.response ? `Response: ${inquiry.response}` : "Response: awaiting comment"
       ].join("\n");
