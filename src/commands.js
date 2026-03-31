@@ -121,6 +121,12 @@ export const commandDefinitions = [
     .setName("fantasy-status")
     .setDescription("Show the current ESPN and fantasy content channel setup."),
   new SlashCommandBuilder()
+    .setName("bot-help")
+    .setDescription("Show the full command dictionary for the fantasy bot."),
+  new SlashCommandBuilder()
+    .setName("participant-help")
+    .setDescription("Show the easiest user-facing commands for league participation."),
+  new SlashCommandBuilder()
     .setName("troll-toggle")
     .setDescription("Enable or disable the Fantasy Troll in the social channel.")
     .addBooleanOption((option) =>
@@ -422,6 +428,74 @@ function getInsiderTipStateForGuild(insiderTipState, guildId) {
   };
 }
 
+function getBotHelpText() {
+  return [
+    "**Fantasy Bot Command Dictionary**",
+    "",
+    "`/participant-help`",
+    "Shows the short list of user-facing commands regular league members can use.",
+    "",
+    "`/mailbag-submit question:...`",
+    "Submit a question or take for the podcast mailbag.",
+    "",
+    "`/insider-tip action:submit text:...`",
+    "Submit a leak, rumor, or anonymous note for Backyard Sources to potentially use in a social post.",
+    "",
+    "`/reporter-respond response:...`",
+    "Reply to an open reporter request for comment. Add `inquiry_id` only if you have multiple open requests.",
+    "",
+    "`/fantasy-status`",
+    "Shows the current setup, channel assignments, link counts, and open tip/mailbag totals.",
+    "",
+    "`/fantasy-test type:...`",
+    "Runs manual live tests like `espn`, `transactions`, `social`, `power`, or `podcast`.",
+    "",
+    "`/fantasy-channel feature:... channel:#...`",
+    "Sets which channel each feature posts into.",
+    "",
+    "`/espn-link action:list-teams|set|show|clear`",
+    "Links ESPN teams/managers to Discord users so posts can reference the right people.",
+    "",
+    "`/rivalry action:set|show|clear`",
+    "Manually manages rivalry pairings used by the reporter workflow.",
+    "",
+    "`/reporter-ask` and `/reporter-status`",
+    "Lets admins manually request quotes and inspect existing reporter inquiries.",
+    "",
+    "`/podcast-context` and `/podcast-host`",
+    "Adds producer notes and renames the podcast hosts.",
+    "",
+    "`/troll-toggle`",
+    "Turns the Fantasy Troll on or off in the social channel.",
+    "",
+    "`/mailbag-status`, `/mailbag-clear`, `/insider-tip action:show|clear-used|clear-all`",
+    "Review and clean up queued community inputs.",
+    "",
+    "`/reminder-channel`, `/reminder-role`, `/reminder-toggle`, `/reminder-timezone`, `/reminder-message`, `/reminder-status`",
+    "Configure and inspect the pre-lock lineup reminder system."
+  ].join("\n");
+}
+
+function getParticipantHelpText() {
+  return [
+    "**How To Participate**",
+    "",
+    "`/mailbag-submit question:...`",
+    "Ask the hosts a question or submit a hot take for the next podcast.",
+    "",
+    "`/insider-tip action:submit text:...`",
+    "Send a rumor, leak, or anonymous note that Backyard Sources might use in the social feed.",
+    "",
+    "`/reporter-respond response:...`",
+    "If the bot asks you for comment, answer here and your quote can show up in posts or the podcast.",
+    "",
+    "`/participant-help`",
+    "Re-open this quick guide any time.",
+    "",
+    "If you want the full operator/admin list, use `/bot-help`."
+  ].join("\n");
+}
+
 function getOpenReporterInquiriesForUser(guildReporterState, userId) {
   return guildReporterState.inquiries.filter(
     (inquiry) => inquiry.status === "open" && inquiry.discordUserId === userId
@@ -618,6 +692,22 @@ export async function handleCommand(interaction) {
         `Insider tips: ${guildInsiderTipState.tips.filter((tip) => !tip.usedAt).length} open`,
         `Mailbag questions: ${guildMailbagState.questions.filter((question) => question.status === "open").length} open`
       ].join("\n"),
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "bot-help") {
+    await interaction.reply({
+      content: getBotHelpText(),
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "participant-help") {
+    await interaction.reply({
+      content: getParticipantHelpText(),
       ephemeral: true
     });
     return;
