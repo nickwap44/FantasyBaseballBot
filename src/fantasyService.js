@@ -99,6 +99,10 @@ function getStateKey(feature, timezone, now) {
   return `${feature}:${timezone}:${getDateInTimezone(now, timezone)}`;
 }
 
+function getClaimKey(runKey) {
+  return `${runKey}:claimed`;
+}
+
 function getLatestTransactionId(snapshot) {
   return snapshot.transactions?.length > 0 ? String(snapshot.transactions[0].id) : null;
 }
@@ -1132,15 +1136,22 @@ export async function runFantasyJobs(client, logger = console) {
 
     for (const feature of ["transactions", "power", "social", "podcast"]) {
       const runKey = getStateKey(feature, timezone, now);
+      const claimKey = getClaimKey(runKey);
       if (!isTimeToRun(now, timezone, feature)) {
         continue;
       }
 
-      if (nextState[guildId][runKey]) {
+      if (nextState[guildId][runKey] || nextState[guildId][claimKey]) {
         continue;
       }
 
       try {
+        nextState[guildId] = {
+          ...nextState[guildId],
+          [claimKey]: new Date().toISOString()
+        };
+        await saveFantasyState(nextState);
+
         const updatedState = await sendFeatureMessage(
           client,
           guildId,
@@ -1154,6 +1165,7 @@ export async function runFantasyJobs(client, logger = console) {
         );
         nextState[guildId] = {
           ...updatedState,
+          [claimKey]: nextState[guildId][claimKey],
           [runKey]: new Date().toISOString()
         };
         await saveFantasyState(nextState);
