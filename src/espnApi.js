@@ -158,6 +158,30 @@ function getCurrentScoringPeriod(payload) {
   return payload?.status?.currentScoringPeriod || payload?.scoringPeriodId || 1;
 }
 
+function summarizeLeagueSettings(payload) {
+  const acquisition = payload?.settings?.acquisitionSettings || {};
+  const schedule = payload?.settings?.scheduleSettings || {};
+  const rawBudgetFlag = [
+    acquisition.isUsingAcquisitionBudget,
+    acquisition.usesAcquisitionBudget,
+    acquisition.acquisitionBudget > 0,
+    acquisition.faabBudget > 0,
+    acquisition.enableAuctionWaiver,
+    acquisition.enableWaiverBid
+  ].find((value) => value !== undefined);
+
+  const usesFaab = Boolean(rawBudgetFlag);
+  return {
+    usesFaab,
+    acquisitionBudget:
+      acquisition.acquisitionBudget ||
+      acquisition.faabBudget ||
+      0,
+    waiverType: acquisition.waiverProcessType || acquisition.waiverRule || null,
+    matchupPeriodCount: schedule.matchupPeriodCount || null
+  };
+}
+
 function getPlayerDisplayName(playerLike, fallbackId = null) {
   if (!playerLike) {
     return fallbackId ? `Player ${fallbackId}` : "Unknown player";
@@ -402,6 +426,7 @@ export async function getLeagueSnapshot() {
     id: payload.id,
     seasonId: payload.seasonId,
     currentScoringPeriod: getCurrentScoringPeriod(payload),
+    settings: summarizeLeagueSettings(payload),
     teams: summarizeTeams(payload),
     transactions: await enrichTransactionPlayers(summarizeTransactions(payload)),
     matchups: summarizeMatchups(payload),
@@ -417,6 +442,7 @@ export async function testEspnConnection() {
     seasonId: snapshot.seasonId,
     teamCount: snapshot.teams.length,
     currentScoringPeriod: snapshot.currentScoringPeriod,
+    usesFaab: snapshot.settings?.usesFaab || false,
     recentTransactions: snapshot.transactions.slice(0, 3)
   };
 }

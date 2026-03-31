@@ -11,6 +11,19 @@ function scoreTeamStrength(team) {
   return team.pointsFor + starterCount * 2 + benchCount * 0.5 - team.losses * 3;
 }
 
+function usesFaab(snapshot) {
+  return Boolean(snapshot?.settings?.usesFaab);
+}
+
+function getWaiverSystemLabel(snapshot) {
+  if (usesFaab(snapshot)) {
+    const budget = snapshot?.settings?.acquisitionBudget;
+    return budget ? `FAAB with a $${budget} budget` : "FAAB";
+  }
+
+  return "standard waiver priority";
+}
+
 function recentTransactionsBlock(transactions) {
   if (transactions.length === 0) {
     return "No new transactions were found in the recent ESPN activity feed.";
@@ -285,7 +298,7 @@ export function buildTransactionsSummary(
 
       const linkedUserId = espnDiscordLinks[String(transaction.teamId)]?.discordUserId || null;
       const managerLabel = linkedUserId ? `<@${linkedUserId}>` : transaction.teamName;
-      const bidText = transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
+      const bidText = usesFaab(snapshot) && transaction.biddingAmount ? ` for $${transaction.biddingAmount}` : "";
       const parts = [];
 
       if (adds.length) {
@@ -362,6 +375,7 @@ export async function buildSocialPost(
   insiderTipsText = ""
 ) {
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
+  const waiverSystemLabel = getWaiverSystemLabel(snapshot);
   const biggestBid = [...snapshot.transactions]
     .filter((transaction) => Number.isFinite(transaction.biddingAmount) && transaction.biddingAmount > 0)
     .sort((left, right) => (right.biddingAmount || 0) - (left.biddingAmount || 0))[0];
@@ -375,12 +389,12 @@ export async function buildSocialPost(
     })[0];
   const insiderGrudges = [
     ...LEAGUE_INSIDER_TRAITS.map((trait) => `- ${trait}`),
-    biggestBid ? `- still side-eyeing ${biggestBid.teamName} for spending $${biggestBid.biddingAmount} like the rest of the league forgot how budgets work` : "",
+    usesFaab(snapshot) && biggestBid ? `- still side-eyeing ${biggestBid.teamName} for spending $${biggestBid.biddingAmount} like the rest of the league forgot how budgets work` : "",
     topTeam ? `- increasingly skeptical of ${topTeam.name} acting like the trophy is already on the mantle` : ""
   ].filter(Boolean).join("\n");
   return generateText({
     systemPrompt:
-      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} Always use full team names and full player names when you mention them. Do not use team abbreviations, roster shorthand, initials, or unexplained acronyms. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. If insider tips are provided, treat them like anonymous league-source notes and rumors that can shape the post without quoting them directly. Do not include hashtags unless they genuinely add something.`,
+      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} This league uses ${waiverSystemLabel}. If it is not a FAAB league, do not mention budgets, bids, or FAAB. Instead, talk about waiver priority, timing, and claim order. Always use full team names and full player names when you mention them. Do not use team abbreviations, roster shorthand, initials, or unexplained acronyms. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. If insider tips are provided, treat them like anonymous league-source notes and rumors that can shape the post without quoting them directly. Do not include hashtags unless they genuinely add something.`,
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       seasonPreviewMode ? "League phase: preseason / early season before meaningful game action." : "",
@@ -401,7 +415,7 @@ export async function buildSocialPost(
 
     const topTransaction = snapshot.transactions[0];
     if (topTransaction) {
-      const amount = topTransaction.biddingAmount ? ` for $${topTransaction.biddingAmount}` : "";
+      const amount = usesFaab(snapshot) && topTransaction.biddingAmount ? ` for $${topTransaction.biddingAmount}` : "";
       return `${LEAGUE_INSIDER_HANDLE}: League sources are already side-eyeing ${topTransaction.teamName} after a ${topTransaction.type.toLowerCase()}${amount}. Somebody in this league thinks today changed everything.`;
     }
 
@@ -427,6 +441,7 @@ export function buildDemoSocialPost(snapshot, timezone) {
 function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
+  const waiverSystemLabel = getWaiverSystemLabel(snapshot);
   return [
     "Write a fantasy baseball podcast transcript for three hosts.",
     `Host 1: ${resolvedHostNames.lead}, the straight man and lead host. He runs the show and introduces segments.`,
@@ -443,6 +458,7 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     `Use these recurring show segments when they fit: ${PODCAST_SEGMENTS.join(", ")}.`,
     "If mailbag questions are provided, include a short Mailbag segment with 1-2 questions and let the hosts react to them naturally.",
     `${resolvedHostNames.lead} should actively introduce segment names like a real recurring show.`,
+    `League waiver system: ${waiverSystemLabel}. If this is not a FAAB league, do not talk about FAAB, budgets, or dollar bids. Use waiver priority and claim order language instead.`,
     "Always use full team names and full player names in dialogue. Do not use team abbreviations, initials, or shorthand labels unless you immediately say the full name first.",
     "Make every line start with the speaker name followed by a colon.",
     "Write for spoken audio, not for reading.",
@@ -753,7 +769,7 @@ export async function buildTransactionGrades(
 ) {
   return generateText({
     systemPrompt:
-      "You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team. If reporter quotes are provided, weave the strongest quote into the coverage when it fits.",
+      `You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, do not mention budgets, bids, or FAAB. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team. If reporter quotes are provided, weave the strongest quote into the coverage when it fits.`,
     userPrompt: [
       `Generate instant transaction grades for ${formatDateTime(new Date(), timezone)}.`,
       registryText ? `Media registry:\n${registryText}` : "",
@@ -850,7 +866,7 @@ export async function buildPodcastPackage(
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+      `You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript.`,
     userPrompt: [
       buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
@@ -893,7 +909,7 @@ export async function buildEmergencyPodcastPackage(
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      "You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript.",
+      `You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript.`,
     userPrompt: [
       `Write an emergency mini-episode for ${formatDateTime(new Date(), timezone)}.`,
       `Focus event: ${focusTransaction.teamName} made a ${focusTransaction.type}${focusTransaction.biddingAmount ? ` for $${focusTransaction.biddingAmount}` : ""}.`,

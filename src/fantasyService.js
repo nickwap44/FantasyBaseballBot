@@ -1184,6 +1184,7 @@ export async function handleFantasyTest(testType, guildId, client) {
       `Connected to ESPN ${result.sport} league \`${result.leagueId}\` for season \`${result.seasonId}\`.`,
       `Teams found: ${result.teamCount}`,
       `Current scoring period: ${result.currentScoringPeriod}`,
+      `Waiver system: ${result.usesFaab ? "FAAB" : "standard priority"}`,
       "",
       ...(result.recentTransactions.length > 0
         ? [
