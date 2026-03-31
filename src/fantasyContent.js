@@ -358,7 +358,8 @@ export async function buildSocialPost(
   snapshot,
   timezone,
   linkedManagersContext = "",
-  reporterContextText = ""
+  reporterContextText = "",
+  insiderTipsText = ""
 ) {
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
   const biggestBid = [...snapshot.transactions]
@@ -379,13 +380,14 @@ export async function buildSocialPost(
   ].filter(Boolean).join("\n");
   return generateText({
     systemPrompt:
-      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} Always use full team names and full player names when you mention them. Do not use team abbreviations, roster shorthand, initials, or unexplained acronyms. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. Do not include hashtags unless they genuinely add something.`,
+      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} Always use full team names and full player names when you mention them. Do not use team abbreviations, roster shorthand, initials, or unexplained acronyms. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. If insider tips are provided, treat them like anonymous league-source notes and rumors that can shape the post without quoting them directly. Do not include hashtags unless they genuinely add something.`,
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       seasonPreviewMode ? "League phase: preseason / early season before meaningful game action." : "",
       `Insider personality and grudges:\n${insiderGrudges}`,
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
+      insiderTipsText ? `Insider tips and leaks:\n${insiderTipsText}` : "",
       "Recent transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5)),
       "",
@@ -791,6 +793,16 @@ export function formatReporterContext(reporterContext = []) {
       ].join("\n");
     })
     .join("\n\n");
+}
+
+export function formatInsiderTips(insiderTips = []) {
+  if (!insiderTips.length) {
+    return "";
+  }
+
+  return insiderTips
+    .map((tip) => `- ${tip.submittedByDisplayName}: ${tip.text}`)
+    .join("\n");
 }
 
 export function buildDemoTransactionGrades(snapshot, timezone) {

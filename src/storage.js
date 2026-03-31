@@ -9,6 +9,7 @@ const fantasyStatePath = path.join(dataDir, "fantasy-state.json");
 const mediaRegistryPath = path.join(dataDir, "media-registry.json");
 const reporterStatePath = path.join(dataDir, "reporter-state.json");
 const mailbagStatePath = path.join(dataDir, "mailbag-state.json");
+const insiderTipStatePath = path.join(dataDir, "insider-tip-state.json");
 
 async function ensureDataDir() {
   await mkdir(dataDir, { recursive: true });
@@ -122,5 +123,14 @@ export async function getMailbagState() {
 
 export async function saveMailbagState(nextState) {
   await writeState("mailbag-state", mailbagStatePath, nextState);
+  return nextState;
+}
+
+export async function getInsiderTipState() {
+  return readState("insider-tip-state", insiderTipStatePath, {});
+}
+
+export async function saveInsiderTipState(nextState) {
+  await writeState("insider-tip-state", insiderTipStatePath, nextState);
   return nextState;
 }

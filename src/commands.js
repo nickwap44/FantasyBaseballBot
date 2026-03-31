@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import { config as appConfig } from "./config.js";
 import { getDatabaseHealth } from "./database.js";
-import { getGuildConfig, getMailbagState, getReporterState, saveGuildConfig, saveMailbagState, saveReporterState } from "./storage.js";
+import { getGuildConfig, getInsiderTipState, getMailbagState, getReporterState, saveGuildConfig, saveInsiderTipState, saveMailbagState, saveReporterState } from "./storage.js";
 import { getLeagueSnapshot } from "./espnApi.js";
 import { handleFantasyTest } from "./fantasyService.js";
 
@@ -294,6 +294,27 @@ export const commandDefinitions = [
         .setRequired(true)
     ),
   new SlashCommandBuilder()
+    .setName("insider-tip")
+    .setDescription("Submit or manage a leak for the league insider social feed.")
+    .addStringOption((option) =>
+      option
+        .setName("action")
+        .setDescription("What you want to do.")
+        .setRequired(true)
+        .addChoices(
+          { name: "submit", value: "submit" },
+          { name: "show", value: "show" },
+          { name: "clear-used", value: "clear-used" },
+          { name: "clear-all", value: "clear-all" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("text")
+        .setDescription("The tip, rumor, or leak for Backyard Sources.")
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
     .setName("mailbag-status")
     .setDescription("Show recent podcast mailbag questions.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
@@ -391,6 +412,13 @@ function getMailbagStateForGuild(mailbagState, guildId) {
   return mailbagState[guildId] || {
     nextQuestionId: 1,
     questions: []
+  };
+}
+
+function getInsiderTipStateForGuild(insiderTipState, guildId) {
+  return insiderTipState[guildId] || {
+    nextTipId: 1,
+    tips: []
   };
 }
 
@@ -557,6 +585,8 @@ export async function handleCommand(interaction) {
     const guildReporterState = getReporterStateForGuild(reporterState, guildId);
     const mailbagState = await getMailbagState();
     const guildMailbagState = getMailbagStateForGuild(mailbagState, guildId);
+    const insiderTipState = await getInsiderTipState();
+    const guildInsiderTipState = getInsiderTipStateForGuild(insiderTipState, guildId);
 
     try {
       const dbHealth = await getDatabaseHealth();
@@ -585,6 +615,7 @@ export async function handleCommand(interaction) {
         `Manual rivalries: ${(guildConfig.rivalries || []).length}`,
         `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`,
         `Reporter inquiries: ${guildReporterState.inquiries.length}`,
+        `Insider tips: ${guildInsiderTipState.tips.filter((tip) => !tip.usedAt).length} open`,
         `Mailbag questions: ${guildMailbagState.questions.filter((question) => question.status === "open").length} open`
       ].join("\n"),
       ephemeral: true
@@ -1030,6 +1061,70 @@ export async function handleCommand(interaction) {
     await saveMailbagState(mailbagState);
     await interaction.reply({
       content: `Mailbag question #${entry.id} submitted for the next podcast.`,
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "insider-tip") {
+    const action = interaction.options.getString("action", true);
+    const insiderTipState = await getInsiderTipState();
+    const guildInsiderTipState = getInsiderTipStateForGuild(insiderTipState, guildId);
+
+    if (action === "show") {
+      const lines = guildInsiderTipState.tips.slice(0, 10).map((tip) => {
+        const status = tip.usedAt ? `used at ${tip.usedAt}` : "open";
+        return `#${tip.id} [${status}] ${tip.submittedByDisplayName}: ${tip.text}`;
+      });
+      await interaction.reply({
+        content: lines.length > 0 ? lines.join("\n") : "No insider tips yet.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    if (action === "clear-used" || action === "clear-all") {
+      insiderTipState[guildId] = {
+        ...guildInsiderTipState,
+        tips: action === "clear-all"
+          ? []
+          : guildInsiderTipState.tips.filter((tip) => !tip.usedAt)
+      };
+      await saveInsiderTipState(insiderTipState);
+      await interaction.reply({
+        content: action === "clear-all" ? "All insider tips cleared." : "Used insider tips cleared.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const text = interaction.options.getString("text")?.trim();
+    if (!text) {
+      await interaction.reply({
+        content: "Please include `text` when submitting an insider tip.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const tip = {
+      id: guildInsiderTipState.nextTipId,
+      text: text.slice(0, 500),
+      submittedByUserId: interaction.user.id,
+      submittedByDisplayName:
+        interaction.member?.displayName ||
+        interaction.user.globalName ||
+        interaction.user.username,
+      submittedAt: new Date().toISOString(),
+      usedAt: null
+    };
+    insiderTipState[guildId] = {
+      nextTipId: guildInsiderTipState.nextTipId + 1,
+      tips: [tip, ...guildInsiderTipState.tips].slice(0, 50)
+    };
+    await saveInsiderTipState(insiderTipState);
+    await interaction.reply({
+      content: `Insider tip #${tip.id} saved for Backyard Sources.`,
       ephemeral: true
     });
     return;

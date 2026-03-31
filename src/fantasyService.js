@@ -1,10 +1,12 @@
 import {
+  getInsiderTipState,
   getMailbagState,
   getGuildConfig,
   getGuildConfigs,
   getFantasyState,
   getMediaRegistry,
   getReporterState,
+  saveInsiderTipState,
   saveMailbagState,
   saveFantasyState,
   saveMediaRegistry,
@@ -18,6 +20,7 @@ import {
   buildDemoTransactionGrades,
   buildDemoTransactionsSummary,
   buildEmergencyPodcastPackage,
+  formatInsiderTips,
   buildPodcastPackage,
   buildPowerRankings,
   buildRegistryUpdate,
@@ -384,6 +387,37 @@ function getMailbagStateForGuild(mailbagState, guildId) {
   return mailbagState[guildId] || {
     nextQuestionId: 1,
     questions: []
+  };
+}
+
+function getInsiderTipStateForGuild(insiderTipState, guildId) {
+  return insiderTipState[guildId] || {
+    nextTipId: 1,
+    tips: []
+  };
+}
+
+function getOpenInsiderTips(insiderTipState, guildId, limit = 3) {
+  return getInsiderTipStateForGuild(insiderTipState, guildId)
+    .tips
+    .filter((tip) => !tip.usedAt)
+    .slice(0, limit);
+}
+
+function markInsiderTipsUsed(insiderTipState, guildId, tips = []) {
+  if (!tips.length) {
+    return;
+  }
+
+  const usedIds = new Set(tips.map((tip) => tip.id));
+  const guildState = getInsiderTipStateForGuild(insiderTipState, guildId);
+  insiderTipState[guildId] = {
+    ...guildState,
+    tips: guildState.tips.map((tip) =>
+      usedIds.has(tip.id)
+        ? { ...tip, usedAt: tip.usedAt || new Date().toISOString() }
+        : tip
+    )
   };
 }
 
@@ -788,7 +822,7 @@ async function maybeRefreshMediaRegistry(snapshot, timezone, now, state, registr
   };
 }
 
-async function sendFeatureMessage(client, guildId, guildConfig, feature, snapshot, state, registry, mailbagState) {
+async function sendFeatureMessage(client, guildId, guildConfig, feature, snapshot, state, registry, mailbagState, insiderTipState) {
   const channelId = getFeatureChannelId(guildConfig, feature);
   if (!channelId) {
     return state;
@@ -828,15 +862,19 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
     const reporterState = await getReporterState();
     const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "social");
     const reporterContextText = formatReporterContext(reporterQuotes);
+    const insiderTips = getOpenInsiderTips(insiderTipState, guildId, 3);
     const content = await buildSocialPost(
       snapshot,
       guildConfig.timezone,
       linkedManagersContext,
-      reporterContextText
+      reporterContextText,
+      formatInsiderTips(insiderTips)
     );
     await channel.send(content);
     markReporterQuotesUsed(reporterState, guildId, "social", reporterQuotes);
     await saveReporterState(reporterState);
+    markInsiderTipsUsed(insiderTipState, guildId, insiderTips);
+    await saveInsiderTipState(insiderTipState);
     return state;
   }
 
@@ -924,6 +962,7 @@ export async function runFantasyJobs(client, logger = console) {
   const mediaRegistry = await getMediaRegistry();
   const reporterState = await getReporterState();
   const mailbagState = await getMailbagState();
+  const insiderTipState = await getInsiderTipState();
   const nextState = { ...fantasyState };
   const nextRegistry = { ...mediaRegistry };
 
@@ -978,7 +1017,8 @@ export async function runFantasyJobs(client, logger = console) {
           snapshot,
           nextState[guildId],
           nextRegistry[guildId],
-          mailbagState
+          mailbagState,
+          insiderTipState
         );
         nextState[guildId] = {
           ...updatedState,
@@ -995,6 +1035,7 @@ export async function runFantasyJobs(client, logger = console) {
   await saveMediaRegistry(nextRegistry);
   await saveReporterState(reporterState);
   await saveMailbagState(mailbagState);
+  await saveInsiderTipState(insiderTipState);
 }
 
 export function startFantasyLoop(client, intervalMs) {
@@ -1220,13 +1261,16 @@ export async function handleFantasyTest(testType, guildId, client) {
     const reporterState = await getReporterState();
     const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "social");
     const reporterContextText = formatReporterContext(reporterQuotes);
+    const insiderTipState = await getInsiderTipState();
+    const insiderTips = getOpenInsiderTips(insiderTipState, guildId, 3);
     const content = testType.startsWith("demo-")
       ? buildDemoSocialPost(snapshot, timezone)
       : await buildSocialPost(
           snapshot,
           timezone,
           linkedManagersContext,
-          reporterContextText
+          reporterContextText,
+          formatInsiderTips(insiderTips)
         );
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "social", content);
@@ -1235,6 +1279,8 @@ export async function handleFantasyTest(testType, guildId, client) {
 
     markReporterQuotesUsed(reporterState, guildId, "social", reporterQuotes);
     await saveReporterState(reporterState);
+    markInsiderTipsUsed(insiderTipState, guildId, insiderTips);
+    await saveInsiderTipState(insiderTipState);
     return content;
   }
 
