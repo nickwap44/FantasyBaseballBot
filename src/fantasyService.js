@@ -479,6 +479,32 @@ function getConfiguredRivalryMatchup(guildConfig, snapshot) {
   }) || null;
 }
 
+function isCompletedTradeTransaction(transaction) {
+  const type = String(transaction.type || "").toUpperCase();
+  if (!type.includes("TRADE")) {
+    return false;
+  }
+
+  const status = String(transaction.status || "").toUpperCase();
+  if (
+    status.includes("PENDING") ||
+    status.includes("PROPOSE") ||
+    status.includes("REQUEST") ||
+    status.includes("REJECT") ||
+    status.includes("VETO") ||
+    status.includes("CANCEL")
+  ) {
+    return false;
+  }
+
+  return (
+    status.includes("ACCEPT") ||
+    status.includes("EXECUT") ||
+    status.includes("PROCESS") ||
+    status.includes("FINAL")
+  );
+}
+
 function getReporterAnnouncementChannelId(guildConfig) {
   return (
     guildConfig.reporterChannelId ||
@@ -572,7 +598,7 @@ async function maybeCreateAutomaticReporterInquiries(
       continue;
     }
 
-    if (transaction.type.includes("TRADE")) {
+    if (isCompletedTradeTransaction(transaction)) {
       const triggerKey = `trade:${transaction.id}`;
       if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
         await createReporterInquiry(
