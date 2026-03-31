@@ -588,10 +588,6 @@ async function maybeCreateAutomaticReporterInquiries(
     return;
   }
 
-  if (!isAutomaticReporterAskAvailable(reporterState, guildId, snapshot.currentScoringPeriod)) {
-    return;
-  }
-
   for (const transaction of snapshot.transactions.slice(0, 5)) {
     const link = links[String(transaction.teamId)];
     if (!link) {
@@ -617,9 +613,19 @@ async function maybeCreateAutomaticReporterInquiries(
           "Controversial trade"
         );
         markReporterTrigger(reporterState, guildId, triggerKey);
-        markAutomaticReporterAskUsed(reporterState, guildId, snapshot.currentScoringPeriod);
         return;
       }
+    }
+  }
+
+  if (!isAutomaticReporterAskAvailable(reporterState, guildId, snapshot.currentScoringPeriod)) {
+    return;
+  }
+
+  for (const transaction of snapshot.transactions.slice(0, 5)) {
+    const link = links[String(transaction.teamId)];
+    if (!link) {
+      continue;
     }
 
     if (transaction.biddingAmount && transaction.biddingAmount >= 15) {
