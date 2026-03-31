@@ -35,6 +35,7 @@ import { savePodcastEpisode } from "./database.js";
 import { getMockLeagueSnapshot } from "./mockLeague.js";
 import { generateText } from "./openaiClient.js";
 import { getDateInTimezone } from "./time.js";
+import { getRecentMlbHighlights, matchHighlightsToPlayers } from "./mlbHighlights.js";
 
 function getFeatureChannelId(guildConfig, feature) {
   const map = {
@@ -118,6 +119,10 @@ function getCurrentEspnLinks(guildConfig) {
   return guildConfig.espnDiscordLinks || {};
 }
 
+function getCurrentHighlightSubscriptions(guildConfig) {
+  return guildConfig.highlightSubscriptions || {};
+}
+
 async function getLinkedManagersContext(client, guildId, snapshot, guildConfig) {
   const links = getCurrentEspnLinks(guildConfig);
   const guild = await client.guilds.fetch(guildId).catch(() => null);
@@ -186,6 +191,119 @@ function getOpenMailbagQuestions(mailbagState, guildId, limit = 4) {
     .questions
     .filter((question) => question.status === "open")
     .slice(0, limit);
+}
+
+function getActiveRosterPlayers(team) {
+  return [...new Set(
+    (team?.roster || [])
+      .filter((entry) => Number.isFinite(entry.lineupSlotId) && entry.lineupSlotId < 20)
+      .map((entry) => entry.playerName)
+      .filter((playerName) => playerName && !/^Player \d+$/.test(playerName))
+  )];
+}
+
+function getLinkedTeamForUser(guildConfig, snapshot, discordUserId) {
+  const link = Object.values(getCurrentEspnLinks(guildConfig)).find(
+    (entry) => entry.discordUserId === discordUserId
+  );
+  if (!link) {
+    return null;
+  }
+
+  const team = snapshot.teams.find((entry) => entry.id === link.teamId);
+  return team
+    ? { ...team, discordUserId }
+    : null;
+}
+
+function trimSeenHighlightKeys(seenKeys = {}) {
+  const entries = Object.entries(seenKeys)
+    .sort((left, right) => new Date(right[1]).getTime() - new Date(left[1]).getTime())
+    .slice(0, 250);
+  return Object.fromEntries(entries);
+}
+
+async function maybeSendHighlightAlerts(
+  client,
+  guildId,
+  guildConfig,
+  snapshot,
+  guildState,
+  now,
+  cachedHighlights,
+  logger = console
+) {
+  const subscriptions = Object.entries(getCurrentHighlightSubscriptions(guildConfig))
+    .filter(([, subscription]) => subscription?.enabled);
+
+  if (!subscriptions.length) {
+    return { state: guildState, cachedHighlights };
+  }
+
+  const lastCheckedAt = new Date(guildState.highlightsLastCheckedAt || 0).getTime();
+  if (Number.isFinite(lastCheckedAt) && now.getTime() - lastCheckedAt < 15 * 60 * 1000) {
+    return { state: guildState, cachedHighlights };
+  }
+
+  const highlights = cachedHighlights || await getRecentMlbHighlights(now);
+  const nextState = {
+    ...guildState,
+    highlightsLastCheckedAt: now.toISOString(),
+    highlightNotifications: guildState.highlightNotifications || {}
+  };
+
+  for (const [discordUserId] of subscriptions) {
+    const linkedTeam = getLinkedTeamForUser(guildConfig, snapshot, discordUserId);
+    if (!linkedTeam) {
+      continue;
+    }
+
+    const activePlayers = getActiveRosterPlayers(linkedTeam);
+    if (!activePlayers.length) {
+      continue;
+    }
+
+    const seenKeys = nextState.highlightNotifications[discordUserId]?.seenKeys || {};
+    const matches = matchHighlightsToPlayers(highlights, activePlayers)
+      .filter((highlight) => !seenKeys[highlight.id])
+      .slice(0, 3);
+
+    if (!matches.length) {
+      continue;
+    }
+
+    const user = await client.users.fetch(discordUserId).catch(() => null);
+    if (!user) {
+      continue;
+    }
+
+    const lines = [
+      `New MLB highlight${matches.length > 1 ? "s" : ""} for your active ${linkedTeam.name} roster:`,
+      ...matches.map((highlight) =>
+        `- ${highlight.playerName}: ${highlight.title}\n${highlight.url}`
+      )
+    ];
+
+    try {
+      await user.send(lines.join("\n"));
+      nextState.highlightNotifications[discordUserId] = {
+        seenKeys: trimSeenHighlightKeys({
+          ...seenKeys,
+          ...Object.fromEntries(matches.map((highlight) => [highlight.id, now.toISOString()]))
+        }),
+        lastSentAt: now.toISOString()
+      };
+    } catch (error) {
+      logger.warn(`Failed to deliver highlight DM to user ${discordUserId} in guild ${guildId}.`, {
+        message: error.message
+      });
+    }
+  }
+
+  return {
+    state: nextState,
+    cachedHighlights: highlights
+  };
 }
 
 async function buildFantasyTrollReply(messageContent) {
@@ -965,6 +1083,7 @@ export async function runFantasyJobs(client, logger = console) {
   const insiderTipState = await getInsiderTipState();
   const nextState = { ...fantasyState };
   const nextRegistry = { ...mediaRegistry };
+  let recentMlbHighlights = null;
 
   for (const [guildId, guildConfig] of Object.entries(guildConfigs)) {
     const timezone = guildConfig.timezone || "America/Los_Angeles";
@@ -976,6 +1095,19 @@ export async function runFantasyJobs(client, logger = console) {
     };
 
     try {
+      const highlightResult = await maybeSendHighlightAlerts(
+        client,
+        guildId,
+        guildConfig,
+        snapshot,
+        nextState[guildId],
+        now,
+        recentMlbHighlights,
+        logger
+      );
+      nextState[guildId] = highlightResult.state;
+      recentMlbHighlights = highlightResult.cachedHighlights;
+
       await maybeCreateAutomaticReporterInquiries(
         client,
         guildId,

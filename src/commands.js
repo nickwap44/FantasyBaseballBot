@@ -30,7 +30,8 @@ function getDefaultGuildConfig() {
       hotTake: "Rico",
       analyst: "Elena"
     },
-    espnDiscordLinks: {}
+    espnDiscordLinks: {},
+    highlightSubscriptions: {}
   };
 }
 
@@ -126,6 +127,18 @@ export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName("participant-help")
     .setDescription("Show the easiest user-facing commands for league participation."),
+  new SlashCommandBuilder()
+    .setName("highlights-opt-in")
+    .setDescription("Opt in or out of MLB highlight notifications for your active ESPN roster.")
+    .addBooleanOption((option) =>
+      option
+        .setName("enabled")
+        .setDescription("Turn highlight notifications on or off for yourself.")
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("highlights-status")
+    .setDescription("Show your current MLB highlight notification setup."),
   new SlashCommandBuilder()
     .setName("troll-toggle")
     .setDescription("Enable or disable the Fantasy Troll in the social channel.")
@@ -386,6 +399,10 @@ function getCurrentEspnLinks(guildConfig) {
   return guildConfig.espnDiscordLinks || {};
 }
 
+function getCurrentHighlightSubscriptions(guildConfig) {
+  return guildConfig.highlightSubscriptions || {};
+}
+
 function normalizeEspnLookup(value) {
   return value?.trim().toLowerCase() || "";
 }
@@ -438,6 +455,9 @@ function getBotHelpText() {
     "`/mailbag-submit question:...`",
     "Submit a question or take for the podcast mailbag.",
     "",
+    "`/highlights-opt-in enabled:true|false` and `/highlights-status`",
+    "Lets a linked manager opt into MLB highlight notifications for players on their active roster.",
+    "",
     "`/insider-tip action:submit text:...`",
     "Submit a leak, rumor, or anonymous note for Backyard Sources to potentially use in a social post.",
     "",
@@ -482,6 +502,12 @@ function getParticipantHelpText() {
     "",
     "`/mailbag-submit question:...`",
     "Ask the hosts a question or submit a hot take for the next podcast.",
+    "",
+    "`/highlights-opt-in enabled:true`",
+    "Opt into MLB highlight DMs for players on your active ESPN lineup once your team is linked.",
+    "",
+    "`/highlights-status`",
+    "Checks whether your highlight notifications are on and which linked team they follow.",
     "",
     "`/insider-tip action:submit text:...`",
     "Send a rumor, leak, or anonymous note that Backyard Sources might use in the social feed.",
@@ -688,6 +714,7 @@ export async function handleCommand(interaction) {
         `Podcast hosts: lead=${guildConfig.podcastHostNames?.lead || "Mason"}, hotTake=${guildConfig.podcastHostNames?.hotTake || "Rico"}, analyst=${guildConfig.podcastHostNames?.analyst || "Elena"}`,
         `Manual rivalries: ${(guildConfig.rivalries || []).length}`,
         `ESPN links: ${Object.keys(getCurrentEspnLinks(guildConfig)).length}`,
+        `Highlight subscribers: ${Object.values(getCurrentHighlightSubscriptions(guildConfig)).filter((entry) => entry?.enabled).length}`,
         `Reporter inquiries: ${guildReporterState.inquiries.length}`,
         `Insider tips: ${guildInsiderTipState.tips.filter((tip) => !tip.usedAt).length} open`,
         `Mailbag questions: ${guildMailbagState.questions.filter((question) => question.status === "open").length} open`
@@ -708,6 +735,61 @@ export async function handleCommand(interaction) {
   if (interaction.commandName === "participant-help") {
     await interaction.reply({
       content: getParticipantHelpText(),
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "highlights-opt-in") {
+    const enabled = interaction.options.getBoolean("enabled", true);
+    const linkedEntry = Object.values(getCurrentEspnLinks(guildConfig)).find(
+      (link) => link.discordUserId === interaction.user.id
+    );
+
+    if (enabled && !linkedEntry) {
+      await interaction.reply({
+        content: "You need to be linked to an ESPN team first. Ask a server admin to use `/espn-link action:set` for your team, then try again.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    guildConfig.highlightSubscriptions = {
+      ...getCurrentHighlightSubscriptions(guildConfig),
+      [interaction.user.id]: enabled
+        ? {
+            enabled: true,
+            linkedTeamId: linkedEntry?.teamId || null,
+            updatedAt: new Date().toISOString()
+          }
+        : {
+            enabled: false,
+            linkedTeamId: linkedEntry?.teamId || null,
+            updatedAt: new Date().toISOString()
+          }
+    };
+    await saveGuildConfig(guildId, guildConfig);
+    await interaction.reply({
+      content: enabled
+        ? `MLB highlight notifications are on. I’ll DM you when a player on ${linkedEntry.teamName} posts a new MLB highlight clip.`
+        : "MLB highlight notifications are off for you.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (interaction.commandName === "highlights-status") {
+    const subscription = getCurrentHighlightSubscriptions(guildConfig)[interaction.user.id];
+    const linkedEntry = Object.values(getCurrentEspnLinks(guildConfig)).find(
+      (link) => link.discordUserId === interaction.user.id
+    );
+
+    await interaction.reply({
+      content: [
+        `Linked ESPN team: ${linkedEntry ? `${linkedEntry.teamName} (${linkedEntry.manager})` : "not linked"}`,
+        `Highlights opt-in: ${subscription?.enabled ? "enabled" : "disabled"}`,
+        subscription?.updatedAt ? `Last updated: ${subscription.updatedAt}` : "Last updated: never"
+      ].join("\n"),
       ephemeral: true
     });
     return;
