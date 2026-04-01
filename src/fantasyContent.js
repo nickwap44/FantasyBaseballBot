@@ -900,18 +900,20 @@ export async function buildPodcastPackage(
   linkedManagersContext = "",
   reporterContextText = "",
   socialDiscussionText = "",
-  mailbagText = ""
+  mailbagText = "",
+  groundedPlayerContextText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      `You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript.`,
+      `You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks.`,
     userPrompt: [
       buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
       socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : "",
-      mailbagText ? `Mailbag questions:\n${mailbagText}` : ""
+      mailbagText ? `Mailbag questions:\n${mailbagText}` : "",
+      groundedPlayerContextText
     ].filter(Boolean).join("\n\n"),
     temperature: 1
   });
@@ -943,12 +945,13 @@ export async function buildEmergencyPodcastPackage(
   hostNames = {},
   linkedManagersContext = "",
   reporterContextText = "",
-  socialDiscussionText = ""
+  socialDiscussionText = "",
+  groundedPlayerContextText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      `You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript.`,
+      `You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks.`,
     userPrompt: [
       `Write an emergency mini-episode for ${formatDateTime(new Date(), timezone)}.`,
       `Focus event: ${focusTransaction.teamName} made a ${focusTransaction.type}${focusTransaction.biddingAmount ? ` for $${focusTransaction.biddingAmount}` : ""}.`,
@@ -959,7 +962,8 @@ export async function buildEmergencyPodcastPackage(
       podcastHistory ? `Recent show memory:\n${podcastHistory}` : "",
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
-      socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : ""
+      socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : "",
+      groundedPlayerContextText
     ].filter(Boolean).join("\n\n"),
     temperature: 1
   });

@@ -36,6 +36,7 @@ import { getMockLeagueSnapshot } from "./mockLeague.js";
 import { generateText } from "./openaiClient.js";
 import { getDateInTimezone } from "./time.js";
 import { getRecentMlbHighlights, matchHighlightsToPlayers } from "./mlbHighlights.js";
+import { buildGroundedPlayerContext } from "./playerContext.js";
 
 function getFeatureChannelId(guildConfig, feature) {
   const map = {
@@ -451,6 +452,7 @@ async function triggerEmergencyPodcast(
     limit: 30,
     hours: 24
   });
+  const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
   const podcast = await buildEmergencyPodcastPackage(
     snapshot,
     latestCandidate.focusTransaction,
@@ -460,7 +462,8 @@ async function triggerEmergencyPodcast(
     hostNames,
     linkedManagersContext,
     reporterContextText,
-    socialDiscussionText
+    socialDiscussionText,
+    groundedPlayerContextText
   );
 
   await channel.send({
@@ -1018,6 +1021,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       hours: 168
     });
     const mailbagQuestions = getOpenMailbagQuestions(mailbagState, guildId, 4);
+    const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
         ? "realtime"
@@ -1031,7 +1035,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       linkedManagersContext,
       reporterContextText,
       socialDiscussionText,
-      formatMailbagQuestions(mailbagQuestions)
+      formatMailbagQuestions(mailbagQuestions),
+      groundedPlayerContextText
     );
     await channel.send({
       content: [
@@ -1441,6 +1446,7 @@ export async function handleFantasyTest(testType, guildId, client) {
       hours: 168
     });
     const mailbagQuestions = getOpenMailbagQuestions(mailbagState, guildId, 4);
+    const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -1467,7 +1473,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           linkedManagersContext,
           reporterContextText,
           socialDiscussionText,
-          formatMailbagQuestions(mailbagQuestions)
+          formatMailbagQuestions(mailbagQuestions),
+          groundedPlayerContextText
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {
