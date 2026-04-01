@@ -41,5 +41,9 @@ export const config = {
   openAiApiKey: process.env.OPENAI_API_KEY || null,
   featureRealtimePodcast: process.env.FEATURE_REALTIME_PODCAST !== "false",
   podcastRenderer: process.env.PODCAST_RENDERER || "tts",
+  podcastStyleTranscriptsDir: process.env.PODCAST_STYLE_TRANSCRIPTS_DIR || null,
+  podcastStyleLeadAliases: process.env.PODCAST_STYLE_LEAD_ALIASES || "",
+  podcastStyleHotTakeAliases: process.env.PODCAST_STYLE_HOT_TAKE_ALIASES || "",
+  podcastStyleAnalystAliases: process.env.PODCAST_STYLE_ANALYST_ALIASES || "",
   databaseUrl: process.env.DATABASE_URL || null
 };

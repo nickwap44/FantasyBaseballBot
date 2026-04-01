@@ -59,5 +59,6 @@ After the bot joins your server, run these slash commands:
 - Fantasy job state is stored in `data/fantasy-state.json`.
 - The weekly fantasy podcast uses AI-generated voices and should be disclosed as AI-generated audio.
 - `PODCAST_RENDERER` defaults to `tts`; set it to `realtime` only if you explicitly want the more conversational renderer.
+- Drop reference transcripts into `data/podcast-style-transcripts` and the podcast generator will derive a style profile from them for format and host-role pacing.
 - Set `ESPN_SPORT=baseball` for ESPN fantasy baseball leagues.
 - If the bot was offline during the reminder window, it will not backfill the missed reminder.

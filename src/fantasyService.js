@@ -37,6 +37,7 @@ import { generateText } from "./openaiClient.js";
 import { getDateInTimezone } from "./time.js";
 import { getRecentMlbHighlights, matchHighlightsToPlayers } from "./mlbHighlights.js";
 import { buildGroundedPlayerContext } from "./playerContext.js";
+import { buildPodcastStyleProfile } from "./podcastStyleProfile.js";
 
 function getFeatureChannelId(guildConfig, feature) {
   const map = {
@@ -453,6 +454,7 @@ async function triggerEmergencyPodcast(
     hours: 24
   });
   const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
+  const styleProfileText = await buildPodcastStyleProfile();
   const podcast = await buildEmergencyPodcastPackage(
     snapshot,
     latestCandidate.focusTransaction,
@@ -463,7 +465,8 @@ async function triggerEmergencyPodcast(
     linkedManagersContext,
     reporterContextText,
     socialDiscussionText,
-    groundedPlayerContextText
+    groundedPlayerContextText,
+    styleProfileText
   );
 
   await channel.send({
@@ -1024,6 +1027,7 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
     });
     const mailbagQuestions = getOpenMailbagQuestions(mailbagState, guildId, 4);
     const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
+    const styleProfileText = await buildPodcastStyleProfile();
     const renderer =
       config.featureRealtimePodcast && config.podcastRenderer === "realtime"
         ? "realtime"
@@ -1038,7 +1042,8 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
       reporterContextText,
       socialDiscussionText,
       formatMailbagQuestions(mailbagQuestions),
-      groundedPlayerContextText
+      groundedPlayerContextText,
+      styleProfileText
     );
     await channel.send({
       content: [
@@ -1453,6 +1458,7 @@ export async function handleFantasyTest(testType, guildId, client) {
     });
     const mailbagQuestions = getOpenMailbagQuestions(mailbagState, guildId, 4);
     const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
+    const styleProfileText = await buildPodcastStyleProfile();
     const renderer = testType.endsWith("-realtime")
       ? "realtime"
       : testType.endsWith("-tts")
@@ -1480,7 +1486,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           reporterContextText,
           socialDiscussionText,
           formatMailbagQuestions(mailbagQuestions),
-          groundedPlayerContextText
+          groundedPlayerContextText,
+          styleProfileText
         );
     const channelId = guildConfig?.podcastChannelId;
     if (!channelId) {

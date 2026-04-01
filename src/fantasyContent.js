@@ -461,7 +461,7 @@ export function buildDemoSocialPost(snapshot, timezone) {
   ].join("\n");
 }
 
-function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
+function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}, styleProfileText = "") {
   const resolvedHostNames = resolveHostNames(hostNames);
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
   const waiverSystemLabel = getWaiverSystemLabel(snapshot);
@@ -470,6 +470,7 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     `Host 1: ${resolvedHostNames.lead}, the straight man and lead host. He runs the show and introduces segments.`,
     `Host 2: ${resolvedHostNames.hotTake}, the hot take artist who overreacts and flies off the handle.`,
     `Host 3: ${resolvedHostNames.analyst}, the steady analyst who grounds everything in evidence.`,
+    "Treat those hosts as original characters for this fantasy league, not as impressions of any real people.",
     "Keep the total transcript in the 5-10 minute range, roughly 700-1200 words.",
     seasonPreviewMode
       ? "This is a season preview episode because meaningful games have not started yet. Include a cold open, one contender/pretender segment, one draft and roster-construction segment, one rivalry or league-drama segment, and one bold-predictions closing segment."
@@ -493,6 +494,8 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     "Use occasional quick asides, laughter beats, and rhetorical questions where they fit.",
     "Do not include stage directions, sound effects, or narration outside the host dialogue.",
     `Current generation time: ${formatDateTime(new Date(), timezone)}`,
+    "",
+    styleProfileText,
     "",
     "Recent podcast memory:",
     historyText || "No prior episode notes yet.",
@@ -905,14 +908,15 @@ export async function buildPodcastPackage(
   reporterContextText = "",
   socialDiscussionText = "",
   mailbagText = "",
-  groundedPlayerContextText = ""
+  groundedPlayerContextText = "",
+  styleProfileText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      `You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks.`,
+      `You are a writers' room for a comedy-inflected fantasy baseball podcast. Make the dialogue lively, specific, and rooted in the supplied league data. Write like real people talking into microphones, with rhythm, overlap, and personality. If the league is pre-draft or meaningful games have not started yet, shift into a true season preview: contenders, draft fallout, roster strengths, rivalry hype, sleepers, bust calls, and personality-driven banter instead of fake game recaps. If recent social-channel discussion is provided, treat it as part of the league conversation and let the hosts react to it naturally when it fits. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks. If a transcript-derived style profile is provided, use it only for high-level format, pacing, and role dynamics. Do not imitate or recreate any real person's exact voice or signature phrasing.`,
     userPrompt: [
-      buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames),
+      buildPodcastPrompt(snapshot, podcastHistory, timezone, resolvedHostNames, styleProfileText),
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
       socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : "",
@@ -950,12 +954,13 @@ export async function buildEmergencyPodcastPackage(
   linkedManagersContext = "",
   reporterContextText = "",
   socialDiscussionText = "",
-  groundedPlayerContextText = ""
+  groundedPlayerContextText = "",
+  styleProfileText = ""
 ) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const transcript = await generateText({
     systemPrompt:
-      `You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks.`,
+      `You are a writers' room for a short emergency fantasy baseball podcast bulletin. Write lively, funny, radio-ready dialogue for three hosts who know each other well. Keep it focused on one breaking league event, around 180-320 words total, with fast pacing and distinct personalities. The lead host should frame the emergency, the hot take host should overreact, and the analyst should stabilize the conversation. If recent social-channel discussion is provided, let the hosts reference the league reaction and chatter around the move. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, never talk about FAAB, budgets, or dollar bids; use waiver priority and claim-order language instead. Always use full team names and full player names in the spoken dialogue. Never use team abbreviations or shorthand that a listener would not understand. Never put raw Discord mention tokens like <@123> into the spoken transcript. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks. If a transcript-derived style profile is provided, use it only for high-level format, pacing, and role dynamics. Do not imitate or recreate any real person's exact voice or signature phrasing.`,
     userPrompt: [
       `Write an emergency mini-episode for ${formatDateTime(new Date(), timezone)}.`,
       `Focus event: ${focusTransaction.teamName} made a ${focusTransaction.type}${focusTransaction.biddingAmount ? ` for $${focusTransaction.biddingAmount}` : ""}.`,
@@ -964,6 +969,7 @@ export async function buildEmergencyPodcastPackage(
       `Hosts: ${resolvedHostNames.lead} (lead), ${resolvedHostNames.hotTake} (hot take), ${resolvedHostNames.analyst} (analyst).`,
       "Include a quick cold open, one breaking-news exchange, one argument about impact, and a short sign-off.",
       podcastHistory ? `Recent show memory:\n${podcastHistory}` : "",
+      styleProfileText,
       linkedManagersContext ? `Linked Discord users for reference only:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes and requests for comment:\n${reporterContextText}` : "",
       socialDiscussionText ? `Recent social channel discussion:\n${socialDiscussionText}` : "",
