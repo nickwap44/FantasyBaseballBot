@@ -1340,9 +1340,13 @@ export async function handleCommand(interaction) {
     try {
       const testType = interaction.options.getString("type", true);
       const result = await handleFantasyTest(testType, guildId, interaction.client);
-      await interaction.editReply({
-        content: result
-      });
+      if (typeof result === "string") {
+        await interaction.editReply({
+          content: result
+        });
+      } else {
+        await interaction.editReply(result);
+      }
     } catch (error) {
       await interaction.editReply({
         content: `Fantasy test failed: ${error.message || "Unknown error"}`

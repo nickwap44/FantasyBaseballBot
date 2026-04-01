@@ -1489,40 +1489,18 @@ export async function handleFantasyTest(testType, guildId, client) {
           groundedPlayerContextText,
           styleProfileText
         );
-    const channelId = guildConfig?.podcastChannelId;
-    if (!channelId) {
-      throw new Error("Podcast channel is not configured.");
-    }
 
-    const channel = await client.channels.fetch(channelId);
-    if (!channel?.isTextBased()) {
-      throw new Error("Podcast channel is not available.");
-    }
-
-    await channel.send({
+    return {
       content: [
-        testType.startsWith("demo-") ? "Demo podcast test episode." : "Manual podcast test episode.",
-        `AI-generated voices and script. Renderer: ${renderer}.`,
+        testType.startsWith("demo-")
+          ? "Private demo podcast test ready."
+          : "Private podcast test ready.",
+        `This preview is only visible to you. Renderer: ${renderer}.`,
         "",
         podcast.summary
       ].join("\n"),
       files: [podcast.audioAttachment, podcast.transcriptAttachment]
-    });
-    await savePodcastEpisode({
-      guildId,
-      episodeKind: testType.startsWith("demo-") ? "demo" : "manual",
-      renderer,
-      title: "The Backyard Bullpen",
-      summary: podcast.summary,
-      memory: podcast.memory,
-      transcript: podcast.transcript
-    });
-    if (!testType.startsWith("demo-")) {
-      markReporterQuotesUsed(reporterState, guildId, "podcast", reporterQuotes);
-      await saveReporterState(reporterState);
-    }
-
-    return "Podcast test episode posted.";
+    };
   }
 
   throw new Error(`Unknown fantasy test type: ${testType}`);
