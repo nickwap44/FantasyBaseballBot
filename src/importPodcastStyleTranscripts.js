@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_STYLE_TRANSCRIPTS_DIR } from "./podcastStyleProfile.js";
 
@@ -34,6 +34,57 @@ function normalizeText(value) {
     .map((line) => line.trim())
     .filter(Boolean)
     .join("\n");
+}
+
+function cleanTranscriptLines(lines) {
+  const cleaned = [];
+  let transcriptStarted = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    if (/^(Source|Title):\s*/i.test(line)) {
+      continue;
+    }
+
+    if (
+      /^Transcript of /i.test(line) ||
+      /^Transcription of /i.test(line) ||
+      /^Copy link to transcript$/i.test(line) ||
+      /^Published /i.test(line) ||
+      /^Connect with the show:/i.test(line) ||
+      /^Subscribe on YouTube$/i.test(line) ||
+      /^Visit us on the Web$/i.test(line) ||
+      /^Support the Show$/i.test(line) ||
+      /^Follow on X$/i.test(line) ||
+      /^Follow on Instagram$/i.test(line) ||
+      /^Join our Discord$/i.test(line) ||
+      /^Hosted by /i.test(line) ||
+      /^See pcm\.adswizz\.com/i.test(line) ||
+      /^\d+\s+views$/i.test(line) ||
+      /^\d+\s+months? ago$/i.test(line)
+    ) {
+      continue;
+    }
+
+    if (/^\d{2}:\d{2}:\d{2}$/.test(line)) {
+      transcriptStarted = true;
+      cleaned.push(line);
+      continue;
+    }
+
+    if (!transcriptStarted && /^(Intro|Fantasy Forecast|Mailbag|NFL News|News & Notes)\b/i.test(line)) {
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  const firstTimestampIndex = cleaned.findIndex((line) => /^\d{2}:\d{2}:\d{2}$/.test(line));
+  return (firstTimestampIndex >= 0 ? cleaned.slice(firstTimestampIndex) : cleaned).join("\n").trim();
 }
 
 function slugify(value) {
@@ -96,23 +147,11 @@ function extractTranscriptBody(html) {
   const marker = html.indexOf("Transcription of");
   const section = marker >= 0 ? html.slice(marker) : html;
   const text = normalizeText(section);
-  const lines = text.split("\n");
-  const transcriptLines = [];
+  return cleanTranscriptLines(text.split("\n"));
+}
 
-  for (const line of lines) {
-    if (/^Transcript of /i.test(line) || /^Fantasy Footballers - Fantasy Football Podcast$/i.test(line)) {
-      continue;
-    }
-
-    if (/^Published /i.test(line) || /^Copy link to transcript$/i.test(line)) {
-      continue;
-    }
-
-    transcriptLines.push(line);
-  }
-
-  const startIndex = transcriptLines.findIndex((line) => /^\d{2}:\d{2}:\d{2}$/.test(line));
-  return (startIndex >= 0 ? transcriptLines.slice(startIndex) : transcriptLines).join("\n").trim();
+function extractTranscriptBodyFromCopiedText(text) {
+  return cleanTranscriptLines(normalizeText(text).split("\n"));
 }
 
 async function importEpisode(url, outputDir, index) {
@@ -128,6 +167,34 @@ async function importEpisode(url, outputDir, index) {
   const fileBody = [`Source: ${url}`, `Title: ${title}`, "", transcript].join("\n");
   await writeFile(outputPath, fileBody, "utf8");
   return outputPath;
+}
+
+async function importCopiedTranscriptFile(filePath, outputDir, index) {
+  const raw = await readFile(filePath, "utf8");
+  const transcript = extractTranscriptBodyFromCopiedText(raw);
+  if (!transcript) {
+    return null;
+  }
+
+  const title = path.basename(filePath, path.extname(filePath)).replace(/[-_]+/g, " ").trim() || `copied-transcript-${index + 1}`;
+  const filename = `${String(index + 1).padStart(2, "0")}-${slugify(title)}.txt`;
+  const outputPath = path.join(outputDir, filename);
+  const fileBody = [`Source: ${filePath}`, `Title: ${title}`, "", transcript].join("\n");
+  await writeFile(outputPath, fileBody, "utf8");
+  return outputPath;
+}
+
+async function getInputFiles(inputPath) {
+  const resolved = path.resolve(inputPath);
+  const stats = await stat(resolved);
+  if (stats.isDirectory()) {
+    const entries = await readdir(resolved, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.join(resolved, entry.name));
+  }
+
+  return [resolved];
 }
 
 function getArgValue(name, fallback = null) {
@@ -148,10 +215,30 @@ function getArgValue(name, fallback = null) {
 
 async function main() {
   const sourceUrl = getArgValue("url", DEFAULT_SOURCE_URL);
+  const inputPath = getArgValue("input", null);
   const outputDir = path.resolve(getArgValue("out", DEFAULT_STYLE_TRANSCRIPTS_DIR));
   const limit = Number.parseInt(getArgValue("limit", String(DEFAULT_LIMIT)), 10) || DEFAULT_LIMIT;
 
   await mkdir(outputDir, { recursive: true });
+
+  if (inputPath) {
+    const inputFiles = await getInputFiles(inputPath);
+    const saved = [];
+
+    for (const [index, filePath] of inputFiles.entries()) {
+      const outputPath = await importCopiedTranscriptFile(filePath, outputDir, index);
+      if (outputPath) {
+        saved.push(outputPath);
+      }
+    }
+
+    console.log(`Imported ${saved.length} copied transcript file(s) into ${outputDir}`);
+    for (const filePath of saved) {
+      console.log(filePath);
+    }
+    return;
+  }
+
   const indexHtml = await fetchText(sourceUrl);
   const episodeLinks = parseEpisodeLinks(indexHtml, sourceUrl).slice(0, Math.max(limit, 1));
 
