@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 
-export const DEFAULT_STYLE_TRANSCRIPTS_DIR = path.resolve("data", "podcast-style-transcripts");
+export const DEFAULT_STYLE_TRANSCRIPTS_DIR = path.resolve("podcast-style-transcripts");
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md"]);
 
 const DEFAULT_ROLE_ALIASES = {
