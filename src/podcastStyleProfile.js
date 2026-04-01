@@ -198,7 +198,12 @@ async function getTranscriptFiles(dirPath) {
   try {
     const entries = await readdir(dirPath, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isFile() && SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) &&
+          entry.name.toLowerCase() !== "readme.md"
+      )
       .map((entry) => path.join(dirPath, entry.name));
   } catch (error) {
     if (error.code === "ENOENT") {
