@@ -216,6 +216,22 @@ function matchupBlock(matchups) {
     .join("\n");
 }
 
+function buildRequiredMatchupSlate(matchups, seasonPreviewMode) {
+  if (!matchups.length) {
+    return "No matchup data is available.";
+  }
+
+  return matchups
+    .map((matchup) => {
+      if (seasonPreviewMode || ((matchup.homeScore || 0) === 0 && (matchup.awayScore || 0) === 0)) {
+        return `- ${matchup.awayTeam} at ${matchup.homeTeam}`;
+      }
+
+      return `- ${matchup.awayTeam} at ${matchup.homeTeam} (${matchup.awayScore.toFixed(1)} to ${matchup.homeScore.toFixed(1)})`;
+    })
+    .join("\n");
+}
+
 function isSeasonPreviewMode(snapshot) {
   const hasRecordedStandings = snapshot.teams.some(
     (team) => (team.wins || 0) > 0 || (team.losses || 0) > 0 || (team.ties || 0) > 0
@@ -465,6 +481,8 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     `${resolvedHostNames.lead} should actively introduce segment names like a real recurring show.`,
     `League waiver system: ${waiverSystemLabel}. If this is not a FAAB league, do not talk about FAAB, budgets, or dollar bids. Use waiver priority and claim order language instead.`,
     "Always use full team names and full player names in dialogue. Do not use team abbreviations, initials, or shorthand labels unless you immediately say the full name first.",
+    "When you reference matchups, preserve the exact pairings and home/away order from the required matchup slate.",
+    "Do not invent, swap, merge, or reassign opponents. If you are unsure, quote the matchup exactly as provided.",
     "Make every line start with the speaker name followed by a colon.",
     "Write for spoken audio, not for reading.",
     "Use short, natural sentences and contractions.",
@@ -482,6 +500,9 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}) {
     "",
     seasonPreviewMode ? "Scheduled matchups / early slate context:" : "Current matchups/results:",
     matchupBlock(snapshot.matchups),
+    "",
+    "Required matchup slate to preserve exactly when mentioned:",
+    buildRequiredMatchupSlate(snapshot.matchups, seasonPreviewMode),
     "",
     "Recent transactions:",
     recentTransactionsBlock(snapshot.transactions)
