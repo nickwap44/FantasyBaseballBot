@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "deploy-commands": "node src/deploy-commands.js",
-    "check": "node --check src/index.js && node --check src/deploy-commands.js"
+    "check": "node --check src/index.js && node --check src/deploy-commands.js",
+    "import-podcast-style": "node src/importPodcastStyleTranscripts.js"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 
-const DEFAULT_STYLE_TRANSCRIPTS_DIR = path.resolve("data", "podcast-style-transcripts");
+export const DEFAULT_STYLE_TRANSCRIPTS_DIR = path.resolve("data", "podcast-style-transcripts");
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md"]);
 
 const DEFAULT_ROLE_ALIASES = {
@@ -76,6 +76,15 @@ function parseTranscriptTurns(text, roleAliases) {
       };
     })
     .filter(Boolean);
+}
+
+function parseTranscriptUtterances(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\d{2}:\d{2}:\d{2}$/.test(line))
+    .filter((line) => !/^episodes analyzed:/i.test(line));
 }
 
 function wordCount(text) {
@@ -212,29 +221,43 @@ export async function buildPodcastStyleProfile() {
   const transcripts = await Promise.all(
     files.map(async (filePath) => {
       const text = await readFile(filePath, "utf8");
-      return parseTranscriptTurns(text, roleAliases);
+      return {
+        turns: parseTranscriptTurns(text, roleAliases),
+        utterances: parseTranscriptUtterances(text)
+      };
     })
   );
 
-  const turns = transcripts.flat().filter(Boolean);
-  if (!turns.length) {
+  const turns = transcripts.flatMap((entry) => entry.turns).filter(Boolean);
+  const utterances = transcripts.flatMap((entry) => entry.utterances).filter(Boolean);
+  if (!utterances.length) {
     return "";
   }
 
   const leadMetrics = summarizeRoleMetrics(turns, "lead");
   const hotTakeMetrics = summarizeRoleMetrics(turns, "hotTake");
   const analystMetrics = summarizeRoleMetrics(turns, "analyst");
+  const roleAware = turns.length > 0;
+  const utteranceTurns = utterances.map((text) => ({ text }));
 
   return [
     "Transcript-derived show style profile:",
     `Episodes analyzed: ${files.length}`,
-    `Overall energy: ${describeShowEnergy(turns)}.`,
+    `Overall energy: ${describeShowEnergy(utteranceTurns)}.`,
     "Use this as structural inspiration only. Do not quote, mimic, or reproduce any recognizable lines or bits from the source transcripts.",
     "",
-    "Role dynamics:",
-    `- Lead host archetype: ${describeLead(leadMetrics)}.`,
-    `- Chaos host archetype: ${describeHotTake(hotTakeMetrics)}.`,
-    `- Analyst host archetype: ${describeAnalyst(analystMetrics)}.`,
+    ...(roleAware
+      ? [
+          "Role dynamics:",
+          `- Lead host archetype: ${describeLead(leadMetrics)}.`,
+          `- Chaos host archetype: ${describeHotTake(hotTakeMetrics)}.`,
+          `- Analyst host archetype: ${describeAnalyst(analystMetrics)}.`
+        ]
+      : [
+          "Role dynamics:",
+          "- Source transcripts were mostly unlabeled by speaker, so use them for overall pacing and chemistry rather than role-specific mimicry.",
+          "- Keep a clear lead host, an energy-spiking host, and a grounding analyst as original characters."
+        ]),
     "",
     "Format guidance:",
     "- Open with a quick cold open before the formal show setup.",

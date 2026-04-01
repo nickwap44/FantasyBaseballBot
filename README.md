@@ -60,5 +60,7 @@ After the bot joins your server, run these slash commands:
 - The weekly fantasy podcast uses AI-generated voices and should be disclosed as AI-generated audio.
 - `PODCAST_RENDERER` defaults to `tts`; set it to `realtime` only if you explicitly want the more conversational renderer.
 - Drop reference transcripts into `data/podcast-style-transcripts` and the podcast generator will derive a style profile from them for format and host-role pacing.
+- Or import Happy Scribe transcript pages with `npm run import-podcast-style -- --url https://podcasts.happyscribe.com/fantasy-footballers-fantasy-football-podcast --limit 6`.
+- Happy Scribe imports are usually unlabeled by speaker, so they improve show energy and segment cadence more than one-to-one host-role behavior.
 - Set `ESPN_SPORT=baseball` for ESPN fantasy baseball leagues.
 - If the bot was offline during the reminder window, it will not backfill the missed reminder.
