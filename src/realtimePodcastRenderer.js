@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { convertPcmToMp3, stitchMp3Segments } from "./audioAssembler.js";
 import { config } from "./config.js";
+import { buildVerbatimSpeechInput, buildVerbatimSpeechInstructions } from "./podcastSpeech.js";
 
 const REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
 const PCM_SAMPLE_RATE = 24000;
@@ -26,13 +27,13 @@ function waitForSocketOpen(ws) {
 }
 
 function buildSessionInstructions(speakerInstructions) {
-  return [
-    "You are rendering a podcast line as natural spoken audio.",
-    "Speak only the exact user-provided line.",
-    "Do not add a speaker name, intro, outro, or extra words.",
-    "Keep the performance conversational and human.",
-    speakerInstructions
-  ].join(" ");
+  return buildVerbatimSpeechInstructions(
+    [
+      "Render the line as natural spoken podcast audio.",
+      "Keep the performance conversational and human.",
+      speakerInstructions
+    ].filter(Boolean).join(" ")
+  );
 }
 
 function sendEvent(ws, event) {
@@ -107,7 +108,7 @@ function renderLineWithRealtime({ text, voice, instructions }) {
       sendEvent(ws, {
         type: "session.update",
         session: {
-          modalities: ["audio", "text"],
+          modalities: ["audio"],
           output_audio_format: "pcm16",
           voice,
           instructions: buildSessionInstructions(instructions)
@@ -118,7 +119,7 @@ function renderLineWithRealtime({ text, voice, instructions }) {
         type: "response.create",
         response: {
           conversation: "none",
-          modalities: ["audio", "text"],
+          modalities: ["audio"],
           output_audio_format: "pcm16",
           voice,
           input: [
@@ -128,7 +129,7 @@ function renderLineWithRealtime({ text, voice, instructions }) {
               content: [
                 {
                   type: "input_text",
-                  text
+                  text: buildVerbatimSpeechInput(text)
                 }
               ]
             }

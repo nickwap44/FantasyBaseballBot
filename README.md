@@ -58,5 +58,6 @@ After the bot joins your server, run these slash commands:
 - On hosts with ephemeral disks, set `DEFAULT_REMINDER_CHANNEL_ID` so the reminder channel is restored automatically after redeploys.
 - Fantasy job state is stored in `data/fantasy-state.json`.
 - The weekly fantasy podcast uses AI-generated voices and should be disclosed as AI-generated audio.
+- `PODCAST_RENDERER` defaults to `tts`; set it to `realtime` only if you explicitly want the more conversational renderer.
 - Set `ESPN_SPORT=baseball` for ESPN fantasy baseball leagues.
 - If the bot was offline during the reminder window, it will not backfill the missed reminder.

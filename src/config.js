@@ -40,6 +40,6 @@ export const config = {
   espnS2: process.env.ESPN_S2 || null,
   openAiApiKey: process.env.OPENAI_API_KEY || null,
   featureRealtimePodcast: process.env.FEATURE_REALTIME_PODCAST !== "false",
-  podcastRenderer: process.env.PODCAST_RENDERER || "realtime",
+  podcastRenderer: process.env.PODCAST_RENDERER || "tts",
   databaseUrl: process.env.DATABASE_URL || null
 };

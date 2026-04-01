@@ -2,6 +2,11 @@ import { AttachmentBuilder } from "discord.js";
 import { generateMusicCue, stitchMp3Segments } from "./audioAssembler.js";
 import { config } from "./config.js";
 import { generateSpeech, generateText } from "./openaiClient.js";
+import {
+  buildVerbatimSpeechInput,
+  buildVerbatimSpeechInstructions,
+  normalizeTranscriptTextForSpeech
+} from "./podcastSpeech.js";
 import { buildRealtimePodcastAudio } from "./realtimePodcastRenderer.js";
 import { formatDateTime } from "./time.js";
 
@@ -545,6 +550,10 @@ export function getVoiceInstructionsForSpeaker(speaker, hostNames = {}) {
 
 function buildNarratedTranscript(transcript, hostNames = {}) {
   return parseTranscriptLines(transcript, hostNames)
+    .map((line) => ({
+      ...line,
+      text: normalizeTranscriptTextForSpeech(line.text)
+    }))
     .slice(0, 80)
     .filter((line) => line.text);
 }
@@ -698,10 +707,12 @@ async function buildTtsPodcastAudio(transcript, hostNames = {}) {
   for (const line of lines) {
     segments.push(
       await generateSpeech({
-        text: line.text,
+        text: buildVerbatimSpeechInput(line.text),
         voice: getVoiceForSpeaker(line.speaker, "tts", hostNames),
         format: "mp3",
-        instructions: getVoiceInstructionsForSpeaker(line.speaker, hostNames)
+        instructions: buildVerbatimSpeechInstructions(
+          getVoiceInstructionsForSpeaker(line.speaker, hostNames)
+        )
       })
     );
   }
@@ -726,26 +737,33 @@ async function buildPodcastPackageAudio(transcript, renderer, hostNames = {}) {
   const resolvedHostNames = resolveHostNames(hostNames);
   const introMusic = await generateMusicCue("intro");
   const introTitle = await generateSpeech({
-    text: `${PODCAST_TITLE}. ${PODCAST_SUBTITLE}.`,
+    text: buildVerbatimSpeechInput(`${PODCAST_TITLE}. ${PODCAST_SUBTITLE}.`),
     voice: getVoiceForSpeaker(resolvedHostNames.lead, renderer, resolvedHostNames),
     format: "mp3",
-    instructions:
+    instructions: buildVerbatimSpeechInstructions(
       "Deliver this like a polished podcast show title. Warm, upbeat, and confident."
+    )
   });
   const bumper = await generateSpeech({
-    text: `Now, here's ${resolvedHostNames.lead}, ${resolvedHostNames.hotTake}, and ${resolvedHostNames.analyst}.`,
+    text: buildVerbatimSpeechInput(
+      `Now, here's ${resolvedHostNames.lead}, ${resolvedHostNames.hotTake}, and ${resolvedHostNames.analyst}.`
+    ),
     voice: getVoiceForSpeaker(resolvedHostNames.lead, renderer, resolvedHostNames),
     format: "mp3",
-    instructions:
+    instructions: buildVerbatimSpeechInstructions(
       "Read this like a short show bumper leading into the hosts. Crisp and energetic."
+    )
   });
   const body = await buildPodcastAudio(transcript, renderer, resolvedHostNames);
   const outroBumper = await generateSpeech({
-    text: `You've been listening to ${PODCAST_TITLE}. Thanks for tuning in to the Backyard Baseball Association.`,
+    text: buildVerbatimSpeechInput(
+      `You've been listening to ${PODCAST_TITLE}. Thanks for tuning in to the Backyard Baseball Association.`
+    ),
     voice: getVoiceForSpeaker(resolvedHostNames.lead, renderer, resolvedHostNames),
     format: "mp3",
-    instructions:
+    instructions: buildVerbatimSpeechInstructions(
       "Read this like a clean podcast sign-off. Friendly, smooth, and conclusive."
+    )
   });
   const outroMusic = await generateMusicCue("outro");
 
