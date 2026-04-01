@@ -393,7 +393,8 @@ export async function buildSocialPost(
   timezone,
   linkedManagersContext = "",
   reporterContextText = "",
-  insiderTipsText = ""
+  insiderTipsText = "",
+  groundedPlayerContextText = ""
 ) {
   const seasonPreviewMode = isSeasonPreviewMode(snapshot);
   const waiverSystemLabel = getWaiverSystemLabel(snapshot);
@@ -415,7 +416,7 @@ export async function buildSocialPost(
   ].filter(Boolean).join("\n");
   return generateText({
     systemPrompt:
-      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} This league uses ${waiverSystemLabel}. If it is not a FAAB league, do not mention budgets, bids, or FAAB. Instead, talk about waiver priority, timing, and claim order. Always use full team names and full player names when you mention them. Do not use team abbreviations, roster shorthand, initials, or unexplained acronyms. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. If insider tips are provided, treat them like anonymous league-source notes and rumors that can shape the post without quoting them directly. Do not include hashtags unless they genuinely add something.`,
+      `You write one fake Twitter/X-style post for a fantasy baseball league as ${LEAGUE_INSIDER_NAME} (${LEAGUE_INSIDER_HANDLE}). It should feel like a single insider update, rumor, or pointed reaction from a plugged-in league source, not a recap. Keep it under 280 characters, make it punchy and conversational, and sound like someone who knows the league politics and has heard things. Write in a consistent insider voice that feels like a recognizable account the league has come to know, complete with recurring grudges, petty skepticism, and a habit of sounding very pleased to know something other people do not. ${seasonPreviewMode ? "Meaningful games have not started yet, so focus on draft rumors, roster overconfidence, preseason trash talk, league tension, or quiet-before-the-storm insider notes." : "React to actual league movement and results."} This league uses ${waiverSystemLabel}. If it is not a FAAB league, do not mention budgets, bids, or FAAB. Instead, talk about waiver priority, timing, and claim order. Always use full team names and full player names when you mention them. Do not use team abbreviations, roster shorthand, initials, or unexplained acronyms. When linked Discord users are provided, use their exact mention token inline naturally when referencing that manager or team. If reporter quotes are provided, treat them as direct requests-for-comment and weave the best quote in when it fits. If insider tips are provided, treat them like anonymous league-source notes and rumors that can shape the post without quoting them directly. Do not include hashtags unless they genuinely add something. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks.`,
     userPrompt: [
       `Create a post for ${formatDateTime(new Date(), timezone)}.`,
       seasonPreviewMode ? "League phase: preseason / early season before meaningful game action." : "",
@@ -423,6 +424,7 @@ export async function buildSocialPost(
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
       insiderTipsText ? `Insider tips and leaks:\n${insiderTipsText}` : "",
+      groundedPlayerContextText,
       "Recent transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5)),
       "",
@@ -804,16 +806,18 @@ export async function buildTransactionGrades(
   timezone,
   registryText = "",
   linkedManagersContext = "",
-  reporterContextText = ""
+  reporterContextText = "",
+  groundedPlayerContextText = ""
 ) {
   return generateText({
     systemPrompt:
-      `You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, do not mention budgets, bids, or FAAB. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team. If reporter quotes are provided, weave the strongest quote into the coverage when it fits.`,
+      `You are the fantasy baseball media desk for the Backyard Baseball Association. Grade recent waivers and trades immediately after they happen. Use short sections, letter grades, and one sharp line of analysis per move. Work in any supplied running jokes or host biases when relevant. This league uses ${getWaiverSystemLabel(snapshot)}. If it is not a FAAB league, do not mention budgets, bids, or FAAB. When linked Discord users are provided, use their exact mention token inline naturally when discussing that manager or team. If reporter quotes are provided, weave the strongest quote into the coverage when it fits. For MLB player analysis, use only the grounded player notes provided in the prompt. If a player is not covered there, do not invent recent performance, injuries, roles, or streaks.`,
     userPrompt: [
       `Generate instant transaction grades for ${formatDateTime(new Date(), timezone)}.`,
       registryText ? `Media registry:\n${registryText}` : "",
       linkedManagersContext ? `Linked Discord users:\n${linkedManagersContext}` : "",
       reporterContextText ? `Reporter quotes:\n${reporterContextText}` : "",
+      groundedPlayerContextText,
       "Transactions:",
       recentTransactionsBlock(snapshot.transactions.slice(0, 5))
     ].filter(Boolean).join("\n\n")

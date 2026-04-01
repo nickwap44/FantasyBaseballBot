@@ -988,12 +988,14 @@ async function sendFeatureMessage(client, guildId, guildConfig, feature, snapsho
     const reporterQuotes = getReporterQuotesForFeature(reporterState, guildId, "social");
     const reporterContextText = formatReporterContext(reporterQuotes);
     const insiderTips = getOpenInsiderTips(insiderTipState, guildId, 3);
+    const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
     const content = await buildSocialPost(
       snapshot,
       guildConfig.timezone,
       linkedManagersContext,
       reporterContextText,
-      formatInsiderTips(insiderTips)
+      formatInsiderTips(insiderTips),
+      groundedPlayerContextText
     );
     await channel.send(content);
     markReporterQuotesUsed(reporterState, guildId, "social", reporterQuotes);
@@ -1377,6 +1379,7 @@ export async function handleFantasyTest(testType, guildId, client) {
     const reporterContextText = formatReporterContext(
       getReporterQuotesForFeature(await getReporterState(), guildId, "transactions")
     );
+    const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
     const content = testType.startsWith("demo-")
       ? buildDemoTransactionGrades(snapshot, timezone)
       : await buildTransactionGrades(
@@ -1384,7 +1387,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           timezone,
           "",
           linkedManagersContext,
-          reporterContextText
+          reporterContextText,
+          groundedPlayerContextText
         );
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "transactions", content);
@@ -1413,6 +1417,7 @@ export async function handleFantasyTest(testType, guildId, client) {
     const reporterContextText = formatReporterContext(reporterQuotes);
     const insiderTipState = await getInsiderTipState();
     const insiderTips = getOpenInsiderTips(insiderTipState, guildId, 3);
+    const groundedPlayerContextText = await buildGroundedPlayerContext(snapshot, snapshot.seasonId);
     const content = testType.startsWith("demo-")
       ? buildDemoSocialPost(snapshot, timezone)
       : await buildSocialPost(
@@ -1420,7 +1425,8 @@ export async function handleFantasyTest(testType, guildId, client) {
           timezone,
           linkedManagersContext,
           reporterContextText,
-          formatInsiderTips(insiderTips)
+          formatInsiderTips(insiderTips),
+          groundedPlayerContextText
         );
     if (testType.startsWith("demo-")) {
       await sendTestContentToFeatureChannel(client, guildConfig, "social", content);
