@@ -643,7 +643,7 @@ function getConfiguredRivalryMatchup(guildConfig, snapshot) {
     rivalries.map((rivalry) => [rivalry.key, rivalry])
   );
 
-  return snapshot.matchups.find((matchup) => {
+  const matchup = snapshot.matchups.find((matchup) => {
     if (!matchup.homeTeamId || !matchup.awayTeamId) {
       return false;
     }
@@ -651,6 +651,16 @@ function getConfiguredRivalryMatchup(guildConfig, snapshot) {
     const key = [matchup.homeTeamId, matchup.awayTeamId].sort((left, right) => left - right).join("-");
     return rivalryMap.has(key);
   }) || null;
+
+  if (!matchup) {
+    return null;
+  }
+
+  const key = [matchup.homeTeamId, matchup.awayTeamId].sort((left, right) => left - right).join("-");
+  return {
+    matchup,
+    rivalry: rivalryMap.get(key)
+  };
 }
 
 function isCompletedTradeTransaction(transaction) {
@@ -828,28 +838,40 @@ async function maybeCreateAutomaticReporterInquiries(
     }
   }
 
-  const rivalryMatchup = getConfiguredRivalryMatchup(guildConfig, snapshot);
+  const configuredRivalry = getConfiguredRivalryMatchup(guildConfig, snapshot);
 
-  if (rivalryMatchup) {
+  if (configuredRivalry) {
+    const { matchup: rivalryMatchup, rivalry } = configuredRivalry;
     const sortedIds = [rivalryMatchup.homeTeamId, rivalryMatchup.awayTeamId].sort((a, b) => a - b);
     const triggerKey = `rivalry:${snapshot.currentScoringPeriod}:${sortedIds.join("-")}`;
     if (!wasReporterTriggerHandled(reporterState, guildId, triggerKey)) {
-      const teamId = rivalryMatchup.homeTeamId;
-      const opponentId = rivalryMatchup.awayTeamId;
-      const link = links[String(teamId)];
-      const team = snapshot.teams.find((entry) => entry.id === teamId);
-      const opponent = snapshot.teams.find((entry) => entry.id === opponentId);
-      if (link && team) {
+      const preferredTeamId = rivalry?.teamAId || rivalryMatchup.homeTeamId;
+      const alternateTeamId = rivalry?.teamBId || rivalryMatchup.awayTeamId;
+      const candidates = [preferredTeamId, alternateTeamId]
+        .map((teamId) => ({
+          teamId,
+          opponentId:
+            teamId === rivalryMatchup.homeTeamId
+              ? rivalryMatchup.awayTeamId
+              : rivalryMatchup.homeTeamId,
+          link: links[String(teamId)],
+          team: snapshot.teams.find((entry) => entry.id === teamId)
+        }))
+        .filter((candidate) => candidate.link && candidate.team);
+
+      const selected = candidates[0];
+      if (selected) {
+        const opponent = snapshot.teams.find((entry) => entry.id === selected.opponentId);
         await createReporterInquiry(
           client,
           reporterState,
           guildId,
           guildConfig,
           {
-            teamId,
-            teamName: team.name,
-            manager: team.manager,
-            discordUserId: link.discordUserId,
+            teamId: selected.teamId,
+            teamName: selected.team.name,
+            manager: selected.team.manager,
+            discordUserId: selected.link.discordUserId,
             prompt: `Rivalry week is heating up against ${opponent?.name || "your opponent"}. What's your message before the matchup swings?`,
             features: ["social", "podcast"]
           },
