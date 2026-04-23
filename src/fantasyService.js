@@ -525,6 +525,8 @@ function getInsiderTipStateForGuild(insiderTipState, guildId) {
   };
 }
 
+const REPORTER_QUOTE_MAX_AGE_DAYS = 14;
+
 function getOpenInsiderTips(insiderTipState, guildId, limit = 3) {
   return getInsiderTipStateForGuild(insiderTipState, guildId)
     .tips
@@ -551,11 +553,21 @@ function markInsiderTipsUsed(insiderTipState, guildId, tips = []) {
 
 function getReporterQuotesForFeature(reporterState, guildId, feature) {
   const state = getReporterStateForGuild(reporterState, guildId);
+  const cutoff = Date.now() - REPORTER_QUOTE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
   return state.inquiries
     .filter((inquiry) => inquiry.status === "responded")
     .filter((inquiry) => inquiry.features.includes(feature))
     .filter((inquiry) => !inquiry.quoteUsage?.[feature])
-    .slice(-5)
+    .filter((inquiry) => {
+      const respondedAt = new Date(inquiry.respondedAt || inquiry.askedAt || 0).getTime();
+      return Number.isFinite(respondedAt) && respondedAt >= cutoff;
+    })
+    .sort(
+      (left, right) =>
+        new Date(right.respondedAt || right.askedAt || 0).getTime() -
+        new Date(left.respondedAt || left.askedAt || 0).getTime()
+    )
+    .slice(0, 5)
     .map((inquiry) => ({
       inquiryId: inquiry.id,
       teamName: inquiry.teamName,
