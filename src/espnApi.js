@@ -161,6 +161,7 @@ function getCurrentScoringPeriod(payload) {
 function summarizeLeagueSettings(payload) {
   const acquisition = payload?.settings?.acquisitionSettings || {};
   const schedule = payload?.settings?.scheduleSettings || {};
+  const scoring = payload?.settings?.scoringSettings || {};
   const rawBudgetFlag = [
     acquisition.isUsingAcquisitionBudget,
     acquisition.usesAcquisitionBudget,
@@ -178,7 +179,13 @@ function summarizeLeagueSettings(payload) {
       acquisition.faabBudget ||
       0,
     waiverType: acquisition.waiverProcessType || acquisition.waiverRule || null,
-    matchupPeriodCount: schedule.matchupPeriodCount || null
+    matchupPeriodCount: schedule.matchupPeriodCount || null,
+    matchupType:
+      scoring.matchupType ||
+      scoring.matchupTypeId ||
+      scoring.scoringType ||
+      scoring.scoringTypeId ||
+      null
   };
 }
 

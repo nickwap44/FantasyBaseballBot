@@ -16,6 +16,40 @@ function scoreTeamStrength(team) {
   return team.pointsFor + starterCount * 2 + benchCount * 0.5 - team.losses * 3;
 }
 
+function isLikelyCategoryLeague(snapshot) {
+  const configuredType = String(snapshot?.settings?.matchupType || "").toLowerCase();
+  if (
+    configuredType.includes("category") ||
+    configuredType.includes("categories") ||
+    configuredType.includes("rotisserie") ||
+    configuredType === "5"
+  ) {
+    return true;
+  }
+
+  const maxMatchupScore = Math.max(
+    0,
+    ...((snapshot?.matchups || []).flatMap((matchup) => [matchup.homeScore || 0, matchup.awayScore || 0]))
+  );
+  const maxSeasonTotal = Math.max(0, ...((snapshot?.teams || []).map((team) => team.pointsFor || 0)));
+
+  // Heuristic fallback for H2H category leagues where ESPN's "totalPoints" fields
+  // tend to represent categories won rather than fantasy points.
+  return maxMatchupScore > 0 && maxMatchupScore <= 25 && maxSeasonTotal <= 250;
+}
+
+function getStandingsMetricLabel(snapshot, short = false) {
+  if (isLikelyCategoryLeague(snapshot)) {
+    return short ? "Cats" : "Categories Won";
+  }
+
+  return short ? "PF" : "Points For";
+}
+
+function getMarginLabel(snapshot) {
+  return isLikelyCategoryLeague(snapshot) ? "Cat Margin" : "Diff";
+}
+
 function usesFaab(snapshot) {
   return Boolean(snapshot?.settings?.usesFaab);
 }
@@ -44,7 +78,8 @@ function recentTransactionsBlock(transactions) {
     .join("\n");
 }
 
-function standingsBlock(teams) {
+function standingsBlock(teams, snapshot = null) {
+  const metricLabel = getStandingsMetricLabel(snapshot, true);
   return [...teams]
     .sort((left, right) => {
       if (right.wins !== left.wins) {
@@ -55,7 +90,7 @@ function standingsBlock(teams) {
     })
     .map(
       (team, index) =>
-        `${index + 1}. ${team.name} (${team.wins}-${team.losses}${team.ties ? `-${team.ties}` : ""}, PF ${team.pointsFor.toFixed(1)})`
+        `${index + 1}. ${team.name} (${team.wins}-${team.losses}${team.ties ? `-${team.ties}` : ""}, ${metricLabel} ${team.pointsFor.toFixed(1)})`
     )
     .join("\n");
 }
@@ -359,6 +394,8 @@ export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
 
   const ranked = getPowerRankingRows(snapshot, espnDiscordLinks);
   const awards = buildWeeklyAwards(ranked, snapshot);
+  const metricLabel = getStandingsMetricLabel(snapshot, true);
+  const marginLabel = getMarginLabel(snapshot);
 
   return [
     `**BBA Power Rankings**`,
@@ -367,7 +404,7 @@ export function buildPowerRankings(snapshot, timezone, espnDiscordLinks = {}) {
       const team = row.team;
       const record = `${team.wins}-${team.losses}${team.ties ? `-${team.ties}` : ""}`;
       const diffPrefix = row.pointDiff >= 0 ? "+" : "";
-      return `${index + 1}. ${team.name} - ${formatManagerTag(row)} | Score ${row.powerScore.toFixed(1)} | Record ${record} | PF ${team.pointsFor.toFixed(1)} | Diff ${diffPrefix}${row.pointDiff.toFixed(1)}`;
+      return `${index + 1}. ${team.name} - ${formatManagerTag(row)} | Score ${row.powerScore.toFixed(1)} | Record ${record} | ${metricLabel} ${team.pointsFor.toFixed(1)} | ${marginLabel} ${diffPrefix}${row.pointDiff.toFixed(1)}`;
     }),
     "",
     "**Weekly Awards**",
@@ -429,7 +466,7 @@ export async function buildSocialPost(
       recentTransactionsBlock(snapshot.transactions.slice(0, 5)),
       "",
       "League standings:",
-      standingsBlock(snapshot.teams.slice(0, 6))
+      standingsBlock(snapshot.teams.slice(0, 6), snapshot)
     ].join("\n")
   }).then((text) => {
     if (text.trim()) {
@@ -501,7 +538,7 @@ function buildPodcastPrompt(snapshot, historyText, timezone, hostNames = {}, sty
     historyText || "No prior episode notes yet.",
     "",
     "Standings:",
-    standingsBlock(snapshot.teams),
+    standingsBlock(snapshot.teams, snapshot),
     "",
     seasonPreviewMode ? "Scheduled matchups / early slate context:" : "Current matchups/results:",
     matchupBlock(snapshot.matchups),
